@@ -75,11 +75,11 @@ admin_header('Editor da Home', false);
     setTimeout(()=>alertBox.classList.add('hidden'), 8000);
   }
 
-  const editor = grapesjs.init({
-    container: '#gjs',
-    height: '100%',
-    fromElement: false,
-    storageManager: false,
+const editor = grapesjs.init({
+  container: '#gjs',
+  height: '100%',
+  fromElement: false,
+  storageManager: false,
     plugins: ['gjs-blocks-basic'],
     pluginsOpts: {
       'gjs-blocks-basic': { flexGrid: true }
@@ -181,30 +181,84 @@ admin_header('Editor da Home', false);
         </section>
       `
     });
-  }
-  addCustomBlocks();
+}
+addCustomBlocks();
+
+const DEFAULT_TEMPLATE = `
+  <section style="padding:80px 20px;background:linear-gradient(135deg,#dc2626,#f59e0b);color:#fff;text-align:center;">
+    <div style="max-width:760px;margin:0 auto;">
+      <h1 style="font-size:48px;font-weight:700;margin-bottom:18px;">Tudo para sua saúde em poucos cliques</h1>
+      <p style="font-size:20px;opacity:0.92;margin-bottom:28px;">Entrega rápida, atendimento humano e os melhores medicamentos do Brasil para os Estados Unidos.</p>
+      <a href="#catalogo" style="display:inline-block;padding:16px 36px;border-radius:999px;background:#fff;color:#dc2626;font-weight:600;text-decoration:none;">Ver catálogo</a>
+    </div>
+  </section>
+  <section id="catalogo" style="padding:60px 20px;background:#f9fafb;">
+    <div style="max-width:1100px;margin:0 auto;">
+      <h2 style="font-size:34px;font-weight:700;text-align:center;margin-bottom:16px;">Categorias em destaque</h2>
+      <p style="text-align:center;color:#475569;margin-bottom:36px;">Escolha a linha de produtos que melhor atende à sua necessidade e receba tudo no conforto da sua casa.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;">
+        <div style="background:#fff;border-radius:18px;padding:26px;box-shadow:0 10px 40px rgba(15,23,42,.08);">
+          <h3 style="font-size:20px;font-weight:600;margin-bottom:6px;">Medicamentos</h3>
+          <p style="color:#64748b;font-size:15px;margin-bottom:14px;">Genéricos, manipulados e medicamentos de alto custo com procedência garantida.</p>
+          <a href="?route=home&category=1" style="color:#dc2626;font-weight:600;">Ver produtos →</a>
+        </div>
+        <div style="background:#fff;border-radius:18px;padding:26px;box-shadow:0 10px 40px rgba(15,23,42,.08);">
+          <h3 style="font-size:20px;font-weight:600;margin-bottom:6px;">Suplementos</h3>
+          <p style="color:#64748b;font-size:15px;margin-bottom:14px;">Vitaminas, minerais e boosters energéticos selecionados por especialistas.</p>
+          <a href="?route=home&category=4" style="color:#dc2626;font-weight:600;">Ver suplementos →</a>
+        </div>
+        <div style="background:#fff;border-radius:18px;padding:26px;box-shadow:0 10px 40px rgba(15,23,42,.08);">
+          <h3 style="font-size:20px;font-weight:600;margin-bottom:6px;">Dermocosméticos</h3>
+          <p style="color:#64748b;font-size:15px;margin-bottom:14px;">Tratamentos faciais, linhas anti-idade e cuidados específicos para a pele.</p>
+          <a href="?route=home&category=8" style="color:#dc2626;font-weight:600;">Ver dermocosméticos →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section style="padding:60px 20px;">
+    <div style="max-width:960px;margin:0 auto;border-radius:24px;background:linear-gradient(135deg,#22c55e,#14b8a6);padding:50px;color:#fff;">
+      <h2 style="font-size:36px;font-weight:700;margin-bottom:18px;">Atendimento humano e entrega garantida</h2>
+      <ul style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;font-size:16px;">
+        <li>✔️ Pagamentos por Pix, Zelle, Venmo, PayPal ou Square</li>
+        <li>✔️ Equipe especializada para auxiliar na compra e prescrição</li>
+        <li>✔️ Acompanhamento do pedido em tempo real pelo painel</li>
+        <li>✔️ Entregas expressas em todo território norte-americano</li>
+      </ul>
+    </div>
+  </section>
+`;
+
+const DEFAULT_STYLES = ``;
 
   async function loadDraft(){
     try {
       const res = await fetch(`${API_URL}?action=get&page=${encodeURIComponent(PAGE_SLUG)}`, { credentials: 'same-origin' });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Falha ao carregar layout');
-      if (data.draft && data.draft.content) {
-        editor.setComponents(data.draft.content);
-      }
-      if (data.draft && data.draft.styles) {
-        editor.setStyle(data.draft.styles);
-      }
-      if (data.published && !data.draft) {
-        showMessage('Nenhum rascunho encontrado. Carregando versão publicada.', 'warning');
-        editor.setComponents(data.published.content || '');
-        editor.setStyle(data.published.styles || '');
-      }
-    } catch (err) {
-      console.error(err);
-      showMessage('Não foi possível carregar o layout: '+err.message, 'error');
+    let loaded = false;
+    if (data.draft && data.draft.content) {
+      editor.setComponents(data.draft.content);
+      if (data.draft.styles) editor.setStyle(data.draft.styles);
+      loaded = true;
+    } else if (data.published && data.published.content) {
+      showMessage('Nenhum rascunho encontrado. Carregando versão publicada.', 'warning');
+      editor.setComponents(data.published.content);
+      if (data.published.styles) editor.setStyle(data.published.styles);
+      loaded = true;
     }
+
+    if (!loaded) {
+      editor.setComponents(DEFAULT_TEMPLATE);
+      editor.setStyle(DEFAULT_STYLES);
+      showMessage('Layout padrão carregado. Publique para substituir a home atual.', 'info');
+    }
+  } catch (err) {
+    console.error(err);
+    showMessage('Não foi possível carregar o layout: '+err.message, 'error');
+    editor.setComponents(DEFAULT_TEMPLATE);
+    editor.setStyle(DEFAULT_STYLES);
   }
+}
 
   function getPayload(){
     return {
