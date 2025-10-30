@@ -235,30 +235,31 @@ const DEFAULT_STYLES = ``;
       const res = await fetch(`${API_URL}?action=get&page=${encodeURIComponent(PAGE_SLUG)}`, { credentials: 'same-origin' });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'Falha ao carregar layout');
-    let loaded = false;
-    if (data.draft && data.draft.content) {
-      editor.setComponents(data.draft.content);
-      if (data.draft.styles) editor.setStyle(data.draft.styles);
-      loaded = true;
-    } else if (data.published && data.published.content) {
-      showMessage('Nenhum rascunho encontrado. Carregando versão publicada.', 'warning');
-      editor.setComponents(data.published.content);
-      if (data.published.styles) editor.setStyle(data.published.styles);
-      loaded = true;
-    }
 
-    if (!loaded) {
+      let loaded = false;
+      if (data.draft && data.draft.content) {
+        editor.setComponents(data.draft.content);
+        if (data.draft.styles) editor.setStyle(data.draft.styles);
+        loaded = true;
+      } else if (data.published && data.published.content) {
+        showMessage('Nenhum rascunho encontrado. Carregando versão publicada.', 'warning');
+        editor.setComponents(data.published.content);
+        if (data.published.styles) editor.setStyle(data.published.styles);
+        loaded = true;
+      }
+
+      if (!loaded) {
+        editor.setComponents(DEFAULT_TEMPLATE);
+        editor.setStyle(DEFAULT_STYLES);
+        showMessage('Layout padrão carregado. Publique para substituir a home atual.', 'info');
+      }
+    } catch (err) {
+      console.error(err);
+      showMessage('Não foi possível carregar o layout: '+err.message, 'error');
       editor.setComponents(DEFAULT_TEMPLATE);
       editor.setStyle(DEFAULT_STYLES);
-      showMessage('Layout padrão carregado. Publique para substituir a home atual.', 'info');
     }
-  } catch (err) {
-    console.error(err);
-    showMessage('Não foi possível carregar o layout: '+err.message, 'error');
-    editor.setComponents(DEFAULT_TEMPLATE);
-    editor.setStyle(DEFAULT_STYLES);
   }
-}
 
   function getPayload(){
     return {
@@ -335,7 +336,11 @@ const DEFAULT_STYLES = ``;
   document.getElementById('btn-publish').addEventListener('click', publishDraft);
   document.getElementById('btn-preview').addEventListener('click', previewDraft);
 
-  loadDraft();
+  if (editor.isReady) {
+    loadDraft();
+  } else {
+    editor.on('load', loadDraft);
+  }
 })();
 </script>
 <?php
