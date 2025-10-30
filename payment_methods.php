@@ -4,7 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require __DIR__.'/bootstrap.php';
-require __DIR__.'/config.php';
+$configData = require __DIR__.'/config.php';
 require __DIR__.'/lib/db.php';
 require __DIR__.'/lib/utils.php';
 require __DIR__.'/admin_layout.php';
@@ -28,6 +28,126 @@ if (!function_exists('csrf_check')) {
 require_admin();
 
 $pdo = db();
+$pdo->exec("CREATE TABLE IF NOT EXISTS payment_methods (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(50) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  description TEXT NULL,
+  instructions LONGTEXT NULL,
+  settings JSON NULL,
+  icon_path VARCHAR(255) NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  require_receipt TINYINT(1) DEFAULT 0,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_payment_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+try {
+  $count = (int)$pdo->query('SELECT COUNT(*) FROM payment_methods')->fetchColumn();
+  if ($count === 0) {
+    $paymentsCfg = $configData['payments'] ?? [];
+    $seed = [];
+    if (!empty($paymentsCfg['pix']['enabled'])) {
+      $seed[] = [
+        'code' => 'pix',
+        'name' => 'Pix',
+        'instructions' => "Use o Pix para pagar seu pedido. Valor: {valor_pedido}.\nChave: {pix_key}",
+        'settings' => [
+          'type' => 'pix',
+          'account_label' => 'Chave Pix',
+          'account_value' => $paymentsCfg['pix']['pix_key'] ?? '',
+          'pix_key' => $paymentsCfg['pix']['pix_key'] ?? '',
+          'merchant_name' => $paymentsCfg['pix']['merchant_name'] ?? '',
+          'merchant_city' => $paymentsCfg['pix']['merchant_city'] ?? ''
+        ],
+        'require_receipt' => 0,
+        'sort_order' => 10
+      ];
+    }
+    if (!empty($paymentsCfg['zelle']['enabled'])) {
+      $seed[] = [
+        'code' => 'zelle',
+        'name' => 'Zelle',
+        'instructions' => "Envie {valor_pedido} via Zelle para {account_value}.",
+        'settings' => [
+          'type' => 'zelle',
+          'account_label' => 'Conta Zelle',
+          'account_value' => $paymentsCfg['zelle']['recipient_email'] ?? '',
+          'recipient_name' => $paymentsCfg['zelle']['recipient_name'] ?? ''
+        ],
+        'require_receipt' => (int)($paymentsCfg['zelle']['require_receipt_upload'] ?? 1),
+        'sort_order' => 20
+      ];
+    }
+    if (!empty($paymentsCfg['venmo']['enabled'])) {
+      $seed[] = [
+        'code' => 'venmo',
+        'name' => 'Venmo',
+        'instructions' => "Pague {valor_pedido} no Venmo. Link: {venmo_link}.",
+        'settings' => [
+          'type' => 'venmo',
+          'account_label' => 'Link Venmo',
+          'account_value' => $paymentsCfg['venmo']['handle'] ?? '',
+          'venmo_link' => $paymentsCfg['venmo']['handle'] ?? ''
+        ],
+        'require_receipt' => 1,
+        'sort_order' => 30
+      ];
+    }
+    if (!empty($paymentsCfg['paypal']['enabled'])) {
+      $seed[] = [
+        'code' => 'paypal',
+        'name' => 'PayPal',
+        'instructions' => "Após finalizar, você será direcionado ao PayPal com o valor {valor_pedido}.",
+        'settings' => [
+          'type' => 'paypal',
+          'account_label' => 'Conta PayPal',
+          'account_value' => $paymentsCfg['paypal']['business'] ?? '',
+          'business' => $paymentsCfg['paypal']['business'] ?? '',
+          'currency' => $paymentsCfg['paypal']['currency'] ?? 'USD',
+          'return_url' => $paymentsCfg['paypal']['return_url'] ?? '',
+          'cancel_url' => $paymentsCfg['paypal']['cancel_url'] ?? ''
+        ],
+        'require_receipt' => 0,
+        'sort_order' => 40
+      ];
+    }
+    if (!empty($paymentsCfg['square']['enabled'])) {
+      $seed[] = [
+        'code' => 'square',
+        'name' => 'Square',
+        'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout Square em uma nova aba.',
+        'settings' => [
+          'type' => 'square',
+          'account_label' => 'Pagamento Square',
+          'account_value' => '',
+          'mode' => 'square_product_link',
+          'open_new_tab' => !empty($paymentsCfg['square']['open_new_tab'])
+        ],
+        'require_receipt' => 0,
+        'sort_order' => 50
+      ];
+    }
+    if ($seed) {
+      $ins = $pdo->prepare('INSERT INTO payment_methods(code,name,instructions,settings,require_receipt,sort_order) VALUES (?,?,?,?,?,?)');
+      foreach ($seed as $pm) {
+        $ins->execute([
+          $pm['code'],
+          $pm['name'],
+          $pm['instructions'],
+          json_encode($pm['settings'], JSON_UNESCAPED_UNICODE),
+          (int)$pm['require_receipt'],
+          (int)$pm['sort_order']
+        ]);
+      }
+    }
+  }
+} catch (Throwable $e) {
+  // registra e segue; a tabela pode estar inacessível
+  error_log('payment_methods bootstrap: '.$e->getMessage());
+}
 $action = $_GET['action'] ?? 'list';
 
 function pm_sanitize($value, $max = 255) {

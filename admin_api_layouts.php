@@ -4,7 +4,7 @@ ini_set('display_startup_errors',1);
 error_reporting(E_ALL);
 
 require __DIR__.'/bootstrap.php';
-require __DIR__.'/config.php';
+$configData = require __DIR__.'/config.php';
 require __DIR__.'/lib/db.php';
 require __DIR__.'/lib/utils.php';
 
@@ -29,6 +29,21 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 require_admin();
 
 $pdo = db();
+try {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS page_layouts (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    page_slug VARCHAR(100) NOT NULL,
+    status ENUM('draft','published') NOT NULL DEFAULT 'draft',
+    content LONGTEXT,
+    styles LONGTEXT,
+    meta JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_layout_slug_status (page_slug, status)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+} catch (Throwable $e) {
+  // falha silenciosa: endpoint continuará com fallback
+}
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? 'get');
 $page   = trim($_GET['page'] ?? ($_POST['page'] ?? 'home'));
@@ -46,12 +61,16 @@ function parse_json_body(): array {
 }
 
 function fetch_layout(PDO $pdo, string $page, string $status): ?array {
-  $st = $pdo->prepare("SELECT id, page_slug, status, content, styles, meta, updated_at FROM page_layouts WHERE page_slug = ? AND status = ? LIMIT 1");
-  $st->execute([$page, $status]);
-  $row = $st->fetch(PDO::FETCH_ASSOC);
-  if (!$row) return null;
-  $row['meta'] = $row['meta'] ? json_decode($row['meta'], true) : null;
-  return $row;
+  try {
+    $st = $pdo->prepare("SELECT id, page_slug, status, content, styles, meta, updated_at FROM page_layouts WHERE page_slug = ? AND status = ? LIMIT 1");
+    $st->execute([$page, $status]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return null;
+    $row['meta'] = $row['meta'] ? json_decode($row['meta'], true) : null;
+    return $row;
+  } catch (Throwable $e) {
+    return null;
+  }
 }
 
 switch ($action) {
