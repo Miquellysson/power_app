@@ -1,0 +1,333 @@
+<?php
+// lib/utils.php - Utilitários Sistema Farma Fácil (farmafixed)
+
+/* =======================
+   Configurações
+   ======================= */
+function cfg() {
+    static $config = null;
+    if ($config === null) {
+        $config = require __DIR__ . '/../config.php';
+    }
+    return $config;
+}
+
+/* =======================
+   Helpers de sessão interna
+   ======================= */
+function _ensure_session() {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        // Evita warnings quando utils.php é usado em scripts como install.php
+        @session_start();
+    }
+}
+
+/* =======================
+   Internacionalização
+   ======================= */
+function lang($key = null) {
+    _ensure_session();
+
+    static $dict = null;
+    if ($dict === null) {
+        $lang = $_SESSION['lang'] ?? (defined('DEFAULT_LANG') ? DEFAULT_LANG : 'pt_BR');
+        $lang_code = substr($lang, 0, 2); // pt_BR -> pt
+
+        $lang_files = [
+            'pt' => __DIR__ . '/../i18n/pt.php',
+            'en' => __DIR__ . '/../i18n/en.php',
+            'es' => __DIR__ . '/../i18n/es.php',
+        ];
+
+        $file = $lang_files[$lang_code] ?? $lang_files['pt'];
+        $dict = file_exists($file) ? require $file : get_default_dict();
+        $dict['_lang'] = $lang_code;
+    }
+
+    return $key === null ? $dict : ($dict[$key] ?? $key);
+}
+
+function set_lang($lang) {
+    _ensure_session();
+    $allowed = ['pt', 'pt_BR', 'en', 'en_US', 'es', 'es_ES'];
+    if (in_array($lang, $allowed, true)) {
+        $_SESSION['lang'] = $lang;
+    }
+}
+
+function t($key) {
+    return lang($key);
+}
+
+function get_default_dict() {
+    return [
+        'title' => 'Farma Fácil',
+        'cart' => 'Carrinho',
+        'search' => 'Buscar',
+        'lang' => 'Idioma',
+        'products' => 'Produtos',
+        'subtotal' => 'Subtotal',
+        'checkout' => 'Finalizar Compra',
+        'name' => 'Nome',
+        'email' => 'E-mail',
+        'phone' => 'Telefone',
+        'address' => 'Endereço',
+        'pay_with' => 'Pagar com',
+        'zelle' => 'Zelle',
+        'venmo' => 'Venmo',
+        'pix' => 'PIX',
+        'paypal' => 'PayPal',
+        'upload_receipt' => 'Enviar Comprovante',
+        'place_order' => 'Finalizar Pedido',
+        'add_to_cart' => 'Adicionar ao Carrinho',
+        'order_received' => 'Pedido Recebido',
+        'status' => 'Status',
+        'pending' => 'Pendente',
+        'processing' => 'Processando',
+        'completed' => 'Concluído',
+        'cancelled' => 'Cancelado',
+        'continue_shopping' => 'Continuar Comprando',
+        'checkout_complete' => 'Compra concluída',
+        'customer_info' => 'Dados do Cliente',
+        'payment_info' => 'Pagamento',
+        'order_details' => 'Resumo do Pedido',
+        'thank_you_order' => 'Obrigado pelo seu pedido!',
+        'city' => 'Cidade',
+        'state' => 'Estado',
+        'zipcode' => 'CEP',
+    ];
+}
+
+/* =======================
+   CSRF Protection
+   ======================= */
+function csrf_token() {
+    _ensure_session();
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrf_check($token) {
+    _ensure_session();
+    return !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], (string)$token);
+}
+
+/* =======================
+   PIX - Gerador de Payload
+   ======================= */
+function pix_payload($pix_key, $merchant_name, $merchant_city, $amount = 0.00, $txid = null) {
+    // PIX EMV QRCode - Especificação BACEN
+
+    // Payload Format Indicator
+    $payload = "000201";
+
+    // Point of Initiation Method (se amount = 0, é reutilizável)
+    $payload .= ($amount > 0) ? "010212" : "010211";
+
+    // Merchant Account Information (PIX)
+    $pix_url = "br.gov.bcb.pix";
+    $pix_key_info = "01" . sprintf("%02d", strlen($pix_key)) . $pix_key;
+    $merchant_acc = $pix_url . $pix_key_info;
+    if ($txid) {
+        $merchant_acc .= "02" . sprintf("%02d", strlen($txid)) . $txid;
+    }
+    $payload .= "26" . sprintf("%02d", strlen($merchant_acc)) . $merchant_acc;
+
+    // Merchant Category Code (não especificado para PIX)
+    $payload .= "52040000";
+
+    // Transaction Currency (986 = BRL)
+    $payload .= "5303986";
+
+    // Transaction Amount
+    if ($amount > 0) {
+        $amount_str = number_format($amount, 2, '.', '');
+        $payload .= "54" . sprintf("%02d", strlen($amount_str)) . $amount_str;
+    }
+
+    // Country Code (BR)
+    $payload .= "5802BR";
+
+    // Merchant Name
+    $merchant_name = substr(remove_accents($merchant_name), 0, 25);
+    $payload .= "59" . sprintf("%02d", strlen($merchant_name)) . $merchant_name;
+
+    // Merchant City
+    $merchant_city = substr(remove_accents($merchant_city), 0, 15);
+    $payload .= "60" . sprintf("%02d", strlen($merchant_city)) . $merchant_city;
+
+    // CRC16 (será calculado)
+    $payload .= "6304";
+
+    // Calcular CRC16
+    $crc = crc16_ccitt($payload);
+    $payload .= strtoupper(sprintf("%04x", $crc));
+
+    return $payload;
+}
+
+function remove_accents($str) {
+    $accents = [
+        'À'=>'A','Á'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','Å'=>'A',
+        'à'=>'a','á'=>'a','â'=>'a','ã'=>'a','ä'=>'a','å'=>'a',
+        'È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E',
+        'è'=>'e','é'=>'e','ê'=>'e','ë'=>'e',
+        'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I',
+        'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i',
+        'Ò'=>'O','Ó'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O',
+        'ò'=>'o','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o',
+        'Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U',
+        'ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u',
+        'Ç'=>'C','ç'=>'c','Ñ'=>'N','ñ'=>'n'
+    ];
+    return strtr($str, $accents);
+}
+
+function crc16_ccitt($data) {
+    $crc = 0xFFFF;
+    $polynomial = 0x1021;
+
+    $len = strlen($data);
+    for ($i = 0; $i < $len; $i++) {
+        $crc ^= (ord($data[$i]) << 8);
+        for ($j = 0; $j < 8; $j++) {
+            if (($crc & 0x8000) !== 0) {
+                $crc = (($crc << 1) ^ $polynomial) & 0xFFFF;
+            } else {
+                $crc = ($crc << 1) & 0xFFFF;
+            }
+        }
+    }
+    return $crc & 0xFFFF;
+}
+
+/* =======================
+   Validações e Sanitização
+   ======================= */
+function validate_email($email) {
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+
+function validate_phone($phone) {
+    $clean = preg_replace('/[^0-9]/', '', (string)$phone);
+    return strlen($clean) >= 10;
+}
+
+function sanitize_string($str, $max_length = 255) {
+    $clean = trim(strip_tags((string)$str));
+    return mb_substr($clean, 0, $max_length, 'UTF-8');
+}
+
+function sanitize_html($html) {
+    return htmlspecialchars((string)$html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+function validate_file_upload($file, $allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], $max_size = 2097152) {
+    if (!isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
+        $code = isset($file['error']) ? $file['error'] : 'unknown';
+        return ['success' => false, 'message' => 'Erro no upload: ' . $code];
+    }
+
+    if ((int)$file['size'] > $max_size) {
+        return ['success' => false, 'message' => 'Arquivo muito grande. Máximo: ' . formatBytes($max_size)];
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime_type = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+
+    if (!in_array($mime_type, $allowed_types, true)) {
+        return ['success' => false, 'message' => 'Tipo de arquivo não permitido.'];
+    }
+
+    return ['success' => true, 'mime_type' => $mime_type];
+}
+
+function formatBytes($bytes, $precision = 2) {
+    $units = ['B', 'KB', 'MB', 'GB'];
+    $i = 0;
+    while ($bytes >= 1024 && $i < count($units) - 1) {
+        $bytes /= 1024;
+        $i++;
+    }
+    return round($bytes, $precision) . ' ' . $units[$i];
+}
+
+/* =======================
+   Sistema de Notificações
+   ======================= */
+function send_notification($type, $title, $message, $data = null) {
+    try {
+        $pdo = db();
+        // Em MariaDB versões antigas, JSON pode ser alias de LONGTEXT — a coluna foi criada como JSON no install,
+        // mas inserir string JSON funciona em ambos os casos.
+        $stmt = $pdo->prepare("INSERT INTO notifications (type, title, message, data, created_at) VALUES (?, ?, ?, ?, NOW())");
+        $stmt->execute([
+            (string)$type,
+            (string)$title,
+            (string)$message,
+            $data ? json_encode($data, JSON_UNESCAPED_UNICODE) : null
+        ]);
+        return true;
+    } catch (Throwable $e) {
+        error_log("Failed to send notification: " . $e->getMessage());
+        return false;
+    }
+}
+
+function get_unread_notifications($limit = 10) {
+    try {
+        $pdo = db();
+        // LIMIT não aceita placeholder em todos os modos; força int
+        $limit = max(1, (int)$limit);
+        $stmt = $pdo->query("SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at DESC LIMIT {$limit}");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function mark_notifications_read($ids = null) {
+    try {
+        $pdo = db();
+        if ($ids === null) {
+            $pdo->exec("UPDATE notifications SET is_read = 1 WHERE is_read = 0");
+        } else {
+            $ids = array_map('intval', (array)$ids);
+            if (!$ids) return true;
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id IN ($placeholders)");
+            $stmt->execute($ids);
+        }
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/* =======================
+   Funções de Formatação
+   ======================= */
+function format_currency($amount, $currency = 'BRL') {
+    $amount = (float)$amount;
+    switch ($currency) {
+        case 'USD': return '$' . number_format($amount, 2, '.', ',');
+        case 'EUR': return '€' . number_format($amount, 2, ',', '.');
+        case 'BRL':
+        default:    return 'R$ ' . number_format($amount, 2, ',', '.');
+    }
+}
+
+function format_date($date, $format = 'd/m/Y') {
+    if (empty($date)) return '-';
+    return date($format, strtotime($date));
+}
+
+function format_datetime($datetime, $format = 'd/m/Y H:i') {
+    if (empty($datetime)) return '-';
+    return date($format, strtotime($datetime));
+}
+
+function slugify($text

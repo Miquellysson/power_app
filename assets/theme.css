@@ -1,0 +1,24 @@
+:root {
+  --brand: #2563eb;
+  --bg-light: #ffffff;
+  --bg-dark: #0b1220;
+  --fg-light: #111827;
+  --fg-dark: #e5e7eb;
+}
+
+html[data-theme='light'] {
+  --bg: var(--bg-light);
+  --fg: var(--fg-light);
+}
+
+html[data-theme='dark'] {
+  --bg: var(--bg-dark);
+  --fg: var(--fg-dark);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  transition: background 0.3s, color 0.3s;
+}

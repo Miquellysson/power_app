@@ -1,0 +1,12 @@
+# /famafaciloficial/storage/.htaccess
+Options -Indexes
+
+# nega execução de scripts
+<FilesMatch "\.(php|phar|phtml|cgi|pl|sh)$">
+  Require all denied
+</FilesMatch>
+
+# permite só imagens/pdf (receipts)
+<FilesMatch "\.(jpe?g|png|gif|webp|svg|pdf)$">
+  Require all granted
+</FilesMatch>
