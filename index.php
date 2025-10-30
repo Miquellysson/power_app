@@ -68,6 +68,169 @@ function proxy_img($url) {
   return $url;
 }
 
+if (!function_exists('sanitize_builder_output')) {
+  function sanitize_builder_output($html) {
+    if ($html === '' || $html === null) {
+      return '';
+    }
+    $clean = preg_replace('#<script\b[^>]*>(.*?)</script>#is', '', (string)$html);
+    $clean = preg_replace('/\son[a-z]+\s*=\s*("[^"]*"|\'[^\']*\')/i', '', $clean);
+    $clean = preg_replace('/javascript\s*:/i', '', $clean);
+    return $clean;
+  }
+}
+
+function load_payment_methods(PDO $pdo, array $cfg): array {
+  static $cache = null;
+  if ($cache !== null) {
+    return $cache;
+  }
+
+  $cache = [];
+  try {
+    $rows = $pdo->query("SELECT * FROM payment_methods WHERE is_active = 1 ORDER BY sort_order ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $row) {
+      $settings = [];
+      if (!empty($row['settings'])) {
+        $decoded = json_decode($row['settings'], true);
+        if (is_array($decoded)) {
+          $settings = $decoded;
+        }
+      }
+      if (!isset($settings['type'])) {
+        $settings['type'] = $row['code'];
+      }
+      if (!isset($settings['account_label'])) {
+        $settings['account_label'] = '';
+      }
+      if (!isset($settings['account_value'])) {
+        $settings['account_value'] = '';
+      }
+      $cache[] = [
+        'id' => (int)$row['id'],
+        'code' => (string)$row['code'],
+        'name' => (string)$row['name'],
+        'description' => (string)($row['description'] ?? ''),
+        'instructions' => (string)($row['instructions'] ?? ''),
+        'settings' => $settings,
+        'icon_path' => $row['icon_path'] ?? null,
+        'require_receipt' => (int)($row['require_receipt'] ?? 0),
+      ];
+    }
+  } catch (Throwable $e) {
+    $cache = [];
+  }
+
+  if (!$cache) {
+    $paymentsCfg = $cfg['payments'] ?? [];
+    $defaults = [];
+    if (!empty($paymentsCfg['pix']['enabled'])) {
+      $defaults[] = [
+        'code' => 'pix',
+        'name' => 'Pix',
+        'instructions' => "Use o Pix para pagar seu pedido. Valor: {valor_pedido}.\nChave: {pix_key}",
+        'settings' => [
+          'type' => 'pix',
+          'account_label' => 'Chave Pix',
+          'account_value' => $paymentsCfg['pix']['pix_key'] ?? '',
+          'pix_key' => $paymentsCfg['pix']['pix_key'] ?? '',
+          'merchant_name' => $paymentsCfg['pix']['merchant_name'] ?? '',
+          'merchant_city' => $paymentsCfg['pix']['merchant_city'] ?? ''
+        ],
+        'require_receipt' => 0
+      ];
+    }
+    if (!empty($paymentsCfg['zelle']['enabled'])) {
+      $defaults[] = [
+        'code' => 'zelle',
+        'name' => 'Zelle',
+        'instructions' => "Envie {valor_pedido} via Zelle para {account_value}.",
+        'settings' => [
+          'type' => 'zelle',
+          'account_label' => 'Conta Zelle',
+          'account_value' => $paymentsCfg['zelle']['recipient_email'] ?? '',
+          'recipient_name' => $paymentsCfg['zelle']['recipient_name'] ?? ''
+        ],
+        'require_receipt' => (int)($paymentsCfg['zelle']['require_receipt_upload'] ?? 1)
+      ];
+    }
+    if (!empty($paymentsCfg['venmo']['enabled'])) {
+      $defaults[] = [
+        'code' => 'venmo',
+        'name' => 'Venmo',
+        'instructions' => "Pague {valor_pedido} no Venmo. Link: {venmo_link}.",
+        'settings' => [
+          'type' => 'venmo',
+          'account_label' => 'Link Venmo',
+          'account_value' => $paymentsCfg['venmo']['handle'] ?? '',
+          'venmo_link' => $paymentsCfg['venmo']['handle'] ?? ''
+        ],
+        'require_receipt' => 1
+      ];
+    }
+    if (!empty($paymentsCfg['paypal']['enabled'])) {
+      $defaults[] = [
+        'code' => 'paypal',
+        'name' => 'PayPal',
+        'instructions' => "Após finalizar, você será direcionado ao PayPal com o valor {valor_pedido}.",
+        'settings' => [
+          'type' => 'paypal',
+          'account_label' => 'Conta PayPal',
+          'account_value' => $paymentsCfg['paypal']['business'] ?? '',
+          'business' => $paymentsCfg['paypal']['business'] ?? '',
+          'currency' => $paymentsCfg['paypal']['currency'] ?? 'USD',
+          'return_url' => $paymentsCfg['paypal']['return_url'] ?? '',
+          'cancel_url' => $paymentsCfg['paypal']['cancel_url'] ?? ''
+        ],
+        'require_receipt' => 0
+      ];
+    }
+    if (!empty($paymentsCfg['square']['enabled'])) {
+      $defaults[] = [
+        'code' => 'square',
+        'name' => 'Square',
+        'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout Square em uma nova aba.',
+        'settings' => [
+          'type' => 'square',
+          'account_label' => 'Pagamento Square',
+          'account_value' => '',
+          'mode' => 'square_product_link',
+          'open_new_tab' => !empty($paymentsCfg['square']['open_new_tab'])
+        ],
+        'require_receipt' => 0
+      ];
+    }
+    $cache = $defaults;
+  }
+
+  return $cache;
+}
+
+function payment_placeholders(array $method, float $totalValue, ?int $orderId = null, ?string $customerEmail = null): array {
+  $settings = $method['settings'] ?? [];
+  $placeholders = [
+    '{valor_pedido}' => format_currency($totalValue, cfg()['store']['currency'] ?? 'USD'),
+    '{numero_pedido}' => $orderId ? (string)$orderId : '',
+    '{email_cliente}' => $customerEmail ?? '',
+    '{account_label}' => $settings['account_label'] ?? '',
+    '{account_value}' => $settings['account_value'] ?? '',
+    '{pix_key}' => $settings['pix_key'] ?? ($settings['account_value'] ?? ''),
+    '{pix_merchant_name}' => $settings['merchant_name'] ?? '',
+    '{pix_merchant_city}' => $settings['merchant_city'] ?? '',
+    '{venmo_link}' => $settings['venmo_link'] ?? ($settings['account_value'] ?? ''),
+    '{paypal_business}' => $settings['business'] ?? '',
+  ];
+  return $placeholders;
+}
+
+function render_payment_instructions(string $template, array $placeholders): string {
+  if ($template === '') {
+    return '';
+  }
+  $text = strtr($template, $placeholders);
+  return nl2br(htmlspecialchars($text, ENT_QUOTES, 'UTF-8'));
+}
+
 function app_header() {
   global $d, $cfg;
 
@@ -401,6 +564,22 @@ if ($route === 'home') {
   app_header();
   $pdo = db();
 
+  $builderHtml = '';
+  $builderCss  = '';
+  try {
+    $stLayout = $pdo->prepare("SELECT content, styles FROM page_layouts WHERE page_slug = ? AND status = 'published' LIMIT 1");
+    $stLayout->execute(['home']);
+    $layoutRow = $stLayout->fetch(PDO::FETCH_ASSOC);
+    if ($layoutRow) {
+      $builderHtml = sanitize_builder_output($layoutRow['content'] ?? '');
+      $builderCss  = trim((string)($layoutRow['styles'] ?? ''));
+    }
+  } catch (Throwable $e) {
+    $builderHtml = '';
+    $builderCss = '';
+  }
+  $hasCustomLayout = ($builderHtml !== '');
+
   $q = trim((string)($_GET['q'] ?? ''));
   $category_id = (int)($_GET['category'] ?? 0);
 
@@ -410,17 +589,31 @@ if ($route === 'home') {
     $categories = $pdo->query("SELECT * FROM categories WHERE active=1 ORDER BY sort_order, name")->fetchAll();
   } catch (Throwable $e) { /* sem categorias ainda */ }
 
-  echo '<section class="bg-gradient-to-br from-brand-700 to-amber-400 text-white py-10 mb-8">';
-  echo '  <div class="max-w-7xl mx-auto px-4 text-center">';
-  echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">Tudo para sua saúde</h2>';
-  echo '    <p class="text-white/90 text-lg mb-6">Experiência de app, rápida e segura</p>';
-  echo '    <form method="get" class="max-w-2xl mx-auto flex gap-2">';
-  echo '      <input type="hidden" name="route" value="home">';
-  echo '      <input class="flex-1 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-white/30" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
-  echo '      <button class="px-5 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
-  echo '    </form>';
-  echo '  </div>';
-  echo '</section>';
+  if ($hasCustomLayout) {
+    if ($builderCss !== '') {
+      echo '<style id="home-builder-css">'.$builderCss.'</style>';
+    }
+    echo '<section class="home-custom-layout">'.$builderHtml.'</section>';
+    echo '<section class="max-w-7xl mx-auto px-4 pt-6 pb-4">';
+    echo '  <form method="get" class="bg-white rounded-2xl shadow px-4 py-4 flex flex-col lg:flex-row gap-3 items-stretch">';
+    echo '    <input type="hidden" name="route" value="home">';
+    echo '    <input class="flex-1 rounded-xl px-4 py-3 border border-gray-200" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
+    echo '    <button class="px-5 py-3 rounded-xl bg-brand-700 text-white font-semibold hover:bg-brand-800"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
+    echo '  </form>';
+    echo '</section>';
+  } else {
+    echo '<section class="bg-gradient-to-br from-brand-700 to-amber-400 text-white py-10 mb-8">';
+    echo '  <div class="max-w-7xl mx-auto px-4 text-center">';
+    echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">Tudo para sua saúde</h2>';
+    echo '    <p class="text-white/90 text-lg mb-6">Experiência de app, rápida e segura</p>';
+    echo '    <form method="get" class="max-w-2xl mx-auto flex gap-2">';
+    echo '      <input type="hidden" name="route" value="home">';
+    echo '      <input class="flex-1 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-white/30" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
+    echo '      <button class="px-5 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
+    echo '    </form>';
+    echo '  </div>';
+    echo '</section>';
+  }
 
   // Filtros de categoria (chips)
   echo '<section class="max-w-7xl mx-auto px-4">';
@@ -670,8 +863,8 @@ if ($route === 'checkout') {
   $shipping = 7.00;
   $total = $subtotal + $shipping;
 
-  // Métodos de pagamento
-  $payments = $cfg['payments'] ?? [];
+  // Métodos de pagamento dinâmicos
+  $paymentMethods = load_payment_methods($pdo, $cfg);
 
   echo '<section class="max-w-6xl mx-auto px-4 py-8">';
   echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-lock mr-2 text-brand-700"></i>'.htmlspecialchars($d['checkout'] ?? 'Finalizar Compra').'</h2>';
@@ -696,63 +889,56 @@ if ($route === 'checkout') {
   // Pagamento
   echo '      <div class="bg-white rounded-2xl shadow p-5">';
   echo '        <div class="font-semibold mb-3"><i class="fa-solid fa-credit-card mr-2 text-brand-700"></i>'.htmlspecialchars($d["payment_info"] ?? "Pagamento").'</div>';
-  echo '        <div class="grid grid-cols-2 gap-3">';
-  foreach (['pix','zelle','venmo','paypal'] as $pm) {
-    if (!empty($payments[$pm]['enabled'])) {
-      $icon = ($pm==='pix')?'fa-qrcode':(($pm==='zelle')?'fa-university':(($pm==='venmo')?'fa-mobile-screen-button':'fa-paypal'));
-      echo '  <label class="border rounded-xl p-4 cursor-pointer hover:border-brand-300">';
-      echo '    <input type="radio" name="payment" value="'.$pm.'" class="sr-only" required>';
-      echo '    <div class="text-center"><i class="fa-solid '.$icon.' text-2xl text-brand-700 mb-2"></i><div class="font-medium">'.htmlspecialchars($d[$pm] ?? strtoupper($pm)).'</div></div>';
+  if (!$paymentMethods) {
+    echo '        <p class="text-sm text-red-600">Nenhum método de pagamento disponível. Atualize as configurações no painel.</p>';
+  } else {
+    echo '        <div class="grid grid-cols-2 gap-3">';
+    foreach ($paymentMethods as $pm) {
+      $code = htmlspecialchars($pm['code']);
+      $label = htmlspecialchars($pm['name']);
+      $icon = 'fa-credit-card';
+      switch ($pm['settings']['type'] ?? $pm['code']) {
+        case 'pix': $icon = 'fa-qrcode'; break;
+        case 'zelle': $icon = 'fa-university'; break;
+        case 'venmo': $icon = 'fa-mobile-screen-button'; break;
+        case 'paypal': $icon = 'fa-paypal'; break;
+        case 'square': $icon = 'fa-arrow-up-right-from-square'; break;
+      }
+      echo '  <label class="border rounded-xl p-4 cursor-pointer hover:border-brand-300 flex flex-col items-center gap-2">';
+      echo '    <input type="radio" name="payment" value="'.$code.'" class="sr-only" required data-code="'.$code.'">';
+      if (!empty($pm['icon_path'])) {
+        echo '    <img src="'.htmlspecialchars($pm['icon_path']).'" alt="'.$label.'" class="h-10">';
+      } else {
+        echo '    <i class="fa-solid '.$icon.' text-2xl text-brand-700"></i>';
+      }
+      echo '    <div class="font-medium">'.$label.'</div>';
       echo '  </label>';
     }
-  }
-  echo '        </div>';
-  
-  // Blocos de instrução + upload por método
-  if (!empty($payments['zelle']['enabled'])) {
-    echo '  <div id="zelle-info" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">';
-    echo '    <p class="text-sm mb-2"><strong>Zelle</strong></p>';
-    echo '    <p class="text-sm">Telefone: <strong>8568794719</strong><br>Nome: <strong>MHBS MULTISERVICES</strong></p>';
-    echo '  </div>';
-    echo '  <div id="zelle-upload" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
-    echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
-    echo '    <input class="w-full px-3 py-2 border rounded" type="file" name="payment_receipt" accept=".jpg,.jpeg,.png,.pdf">';
-    echo '    <p class="text-xs text-gray-500 mt-2">Anexe o comprovante após realizar o pagamento via Zelle.</p>';
-    echo '  </div>';
-  }
-  if (!empty($payments['pix']['enabled'])) {
-    echo '  <div id="pix-info" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">';
-    echo '    <p class="text-sm mb-2"><strong>Pix</strong></p>';
-    echo '    <p class="text-sm">Chave: <strong>'.htmlspecialchars($payments['pix']['pix_key'] ?? '', ENT_QUOTES, 'UTF-8').'</strong><br>Beneficiário: <strong>'.htmlspecialchars($payments['pix']['merchant_name'] ?? '', ENT_QUOTES, 'UTF-8').'</strong></p>';
-    echo '  </div>';
-    echo '  <div id="pix-upload" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
-    echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
-    echo '    <input class="w-full px-3 py-2 border rounded" type="file" name="payment_receipt" accept=".jpg,.jpeg,.png,.pdf">';
-    echo '    <p class="text-xs text-gray-500 mt-2">Anexe o comprovante após realizar o pagamento via Pix.</p>';
-    echo '  </div>';
-  }
-  if (!empty($payments['venmo']['enabled'])) {
-    echo '  <div id="venmo-info" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">';
-    echo '    <p class="text-sm mb-2"><strong>Venmo</strong></p>';
-    echo '    <p class="text-sm">Link: <a class="underline text-brand-700" target="_blank" href="'.htmlspecialchars($payments['venmo']['handle'] ?? '', ENT_QUOTES, 'UTF-8').'">Abrir Venmo</a></p>';
-    echo '  </div>';
-    echo '  <div id="venmo-upload" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
-    echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
-    echo '    <input class="w-full px-3 py-2 border rounded" type="file" name="payment_receipt" accept=".jpg,.jpeg,.png,.pdf">';
-    echo '    <p class="text-xs text-gray-500 mt-2">Anexe o comprovante após realizar o pagamento via Venmo.</p>';
-    echo '  </div>';
-  }
-  if (!empty($payments['paypal']['enabled'])) {
-    echo '  <div id="paypal-info" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">';
-    echo '    <p class="text-sm mb-2"><strong>PayPal</strong></p>';
-    echo '    <p class="text-sm">Usuário: <strong>'.htmlspecialchars($payments['paypal']['business'] ?? '', ENT_QUOTES, 'UTF-8').'</strong></p>';
-    echo '    <p class="text-xs text-gray-600">Ao concluir, você pode ser redirecionado ao PayPal com o valor do pedido preenchido.</p>';
-    echo '  </div>';
-    echo '  <div id="paypal-upload" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
-    echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
-    echo '    <input class="w-full px-3 py-2 border rounded" type="file" name="payment_receipt" accept=".jpg,.jpeg,.png,.pdf">';
-    echo '    <p class="text-xs text-gray-500 mt-2">Opcional: anexe o comprovante do PayPal se desejar.</p>';
-    echo '  </div>';
+    echo '        </div>';
+
+    foreach ($paymentMethods as $pm) {
+      $code = htmlspecialchars($pm['code']);
+      $settings = $pm['settings'] ?? [];
+      $accountLabel = htmlspecialchars($settings['account_label'] ?? '');
+      $accountValue = htmlspecialchars($settings['account_value'] ?? '');
+      $placeholders = payment_placeholders($pm, $total);
+      $instructionsHtml = render_payment_instructions($pm['instructions'] ?? '', $placeholders);
+      echo '  <div data-payment-info="'.$code.'" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700">';
+      if ($accountLabel || $accountValue) {
+        echo '    <p class="mb-2"><strong>'.$accountLabel.'</strong>: '.$accountValue.'</p>';
+      }
+      if ($instructionsHtml !== '') {
+        echo '    <p>'.$instructionsHtml.'</p>';
+      }
+      echo '  </div>';
+      if (!empty($pm['require_receipt'])) {
+        echo '  <div data-payment-receipt="'.$code.'" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
+        echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
+        echo '    <input class="w-full px-3 py-2 border rounded" type="file" name="payment_receipt" accept=".jpg,.jpeg,.png,.pdf">';
+        echo '    <p class="text-xs text-gray-500 mt-2">Anexe o comprovante após realizar o pagamento.</p>';
+        echo '  </div>';
+      }
+    }
   }
 
 echo '      </div>';
@@ -780,18 +966,25 @@ echo '      </div>';
   echo '  </form>';
   echo '</section>';
 
-  echo '<script>
-    document.querySelectorAll("input[name=payment]").forEach(r => {
-      r.addEventListener("change", function(){
-        document.querySelectorAll(".border-brand-300").forEach(el=>el.classList.remove("border-brand-300"));
-        const card = this.closest("label");
-        if(card) card.classList.add("border-brand-300");
-        const ids = ["zelle-info","zelle-upload","pix-info","pix-upload","venmo-info","venmo-upload","paypal-info","paypal-upload"];
-        ids.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add("hidden"); });
-        const map = { zelle:["zelle-info","zelle-upload"], pix:["pix-info","pix-upload"], venmo:["venmo-info","venmo-upload"], paypal:["paypal-info","paypal-upload"] };
-        (map[this.value] || []).forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); });
+  echo "<script>
+    const paymentRadios = document.querySelectorAll(\"input[name='payment']\");
+    const infoBlocks = document.querySelectorAll('[data-payment-info]');
+    const receiptBlocks = document.querySelectorAll('[data-payment-receipt]');
+    paymentRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('.border-brand-300').forEach(el => el.classList.remove('border-brand-300'));
+        const card = radio.closest('label');
+        if (card) card.classList.add('border-brand-300');
+        const code = radio.dataset.code;
+        infoBlocks.forEach(block => {
+          block.classList.toggle('hidden', block.getAttribute('data-payment-info') !== code);
+        });
+        receiptBlocks.forEach(block => {
+          block.classList.toggle('hidden', block.getAttribute('data-payment-receipt') !== code);
+        });
       });
-    });</script>';
+    });
+  </script>";
 
   app_footer();
   exit;
@@ -814,7 +1007,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $zipcode = sanitize_string($_POST['zipcode'] ?? '');
   $payment_method = $_POST['payment'] ?? '';
 
-  if (!$name || !validate_email($email) || !$phone || !$address || !in_array($payment_method, ['pix','zelle','venmo','paypal'], true)) {
+  if (!$name || !validate_email($email) || !$phone || !$address) {
     die('Dados inválidos');
   }
 
@@ -832,11 +1025,98 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       'name'=>$p['name'],
       'price'=>(float)$p['price'],
       'qty'=>$qty,
-      'sku'=>$p['sku']
+      'sku'=>$p['sku'],
+      'square_link'=> trim((string)($p['square_payment_link'] ?? ''))
     ];
     $subtotal += (float)$p['price'] * $qty;
   }
   $shipping = 7.00; $total = $subtotal + $shipping;
+
+  $methods = load_payment_methods($pdo, $cfg);
+  $methodMap = [];
+  foreach ($methods as $m) {
+    $methodMap[$m['code']] = $m;
+  }
+  if (!isset($methodMap[$payment_method])) {
+    die('Método de pagamento inválido');
+  }
+  $selectedMethod = $methodMap[$payment_method];
+  $methodSettings = $selectedMethod['settings'] ?? [];
+  $methodType = $methodSettings['type'] ?? $selectedMethod['code'];
+
+  $squareRedirectUrl = null;
+  $squareWarning = null;
+  if ($methodType === 'square' && ($methodSettings['mode'] ?? 'square_product_link') === 'square_product_link') {
+    $squareLinks = [];
+    $squareMissing = [];
+    foreach ($items as $itemInfo) {
+      $link = $itemInfo['square_link'] ?? '';
+      if ($link === '') {
+        $squareMissing[] = $itemInfo['name'];
+      } else {
+        $squareLinks[$link] = true;
+      }
+    }
+    if (!empty($squareMissing)) {
+      $cleanNames = array_map(function($name){ return sanitize_string($name ?? '', 80); }, $squareMissing);
+      $squareWarning = 'Pagamento Square pendente para: '.implode(', ', $cleanNames);
+    } elseif (count($squareLinks) > 1) {
+      $squareWarning = 'Mais de um link Square encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
+    } elseif (!empty($squareLinks)) {
+      $keys = array_keys($squareLinks);
+      $squareRedirectUrl = $keys[0];
+    }
+  }
+
+  $hasUploadedReceipt = !empty($_FILES['payment_receipt']['name']) || !empty($_FILES['zelle_receipt']['name']);
+  if (!empty($selectedMethod['require_receipt']) && !$hasUploadedReceipt) {
+    die('Envie o comprovante de pagamento para concluir o pedido.');
+  }
+
+  $payRef = '';
+  switch ($methodType) {
+    case 'pix':
+      $pixKey = $methodSettings['pix_key'] ?? ($methodSettings['account_value'] ?? '');
+      $merchantName = $methodSettings['merchant_name'] ?? 'Farma Fácil';
+      $merchantCity = $methodSettings['merchant_city'] ?? 'MACEIO';
+      if ($pixKey) {
+        $payRef = pix_payload($pixKey, $merchantName, $merchantCity, $total);
+      }
+      break;
+    case 'zelle':
+      $payRef = $methodSettings['account_value'] ?? '';
+      break;
+    case 'venmo':
+      $payRef = $methodSettings['venmo_link'] ?? ($methodSettings['account_value'] ?? '');
+      break;
+    case 'paypal':
+      $business = $methodSettings['business'] ?? '';
+      $currency = $methodSettings['currency'] ?? 'USD';
+      $returnUrl = $methodSettings['return_url'] ?? '';
+      $cancelUrl = $methodSettings['cancel_url'] ?? '';
+      if ($business) {
+        $payRef = 'https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business='.
+                  rawurlencode($business).
+                  '&currency_code='.rawurlencode($currency).
+                  '&amount='.number_format($total, 2, '.', '').
+                  '&item_name=Pedido%20Farma%20Facil&return='.
+                  rawurlencode($returnUrl).
+                  '&cancel_return='.
+                  rawurlencode($cancelUrl);
+      }
+      break;
+    case 'square':
+      $mode = $methodSettings['mode'] ?? 'square_product_link';
+      if ($mode === 'square_product_link') {
+        $payRef = $squareRedirectUrl ?: 'SQUARE:pendente';
+      } elseif (!empty($methodSettings['redirect_url'])) {
+        $payRef = $methodSettings['redirect_url'];
+      }
+      break;
+    default:
+      $payRef = $methodSettings['redirect_url'] ?? ($methodSettings['account_value'] ?? '');
+      break;
+  }
 
   try {
     $pdo->beginTransaction();
@@ -876,7 +1156,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
     }
-if ($payment_method === "zelle" && !empty($_FILES["zelle_receipt"]["name"])) {
+    if ($methodType === 'zelle' && !empty($_FILES["zelle_receipt"]["name"])) {
       $val = validate_file_upload($_FILES["zelle_receipt"], ["image/jpeg","image/png","application/pdf"]);
       if ($val["success"]) {
         $dir = __DIR__ . "/storage/zelle_receipts";
@@ -889,20 +1169,6 @@ if ($payment_method === "zelle" && !empty($_FILES["zelle_receipt"]["name"])) {
       }
     }
 
-    // referência de pagamento
-    $payRef = "";
-    $payments = $cfg["payments"] ?? [];
-    if ($payment_method === "pix") {
-      $payRef = pix_payload($payments["pix"]["pix_key"], $payments["pix"]["merchant_name"], $payments["pix"]["merchant_city"], $total);
-    } elseif ($payment_method === "venmo") {
-      $payRef = "https://venmo.com/u/".$payments["venmo"]["handle"];
-    } elseif ($payment_method === "paypal") {
-      $payRef = "https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=".$payments["paypal"]["business"]."&currency_code=".$payments["paypal"]["currency"]."&amount=".$total."&item_name=Pedido%20Farma%20Facil&return=".$payments["paypal"]["return_url"]."&cancel_return=".$payments["paypal"]["cancel_url"];
-    } elseif ($payment_method === "zelle") {
-      $payRef = $payments["zelle"]["recipient_email"];
-    }
-
-  
   // pedido
   // Verifica se coluna 'track_token' existe (compat com DBs sem migração)
   $hasTrack = false;
@@ -927,6 +1193,12 @@ if ($payment_method === "zelle" && !empty($_FILES["zelle_receipt"]["name"])) {
     send_notification("new_order","Novo Pedido","Pedido #$order_id de ".sanitize_html($name),["order_id"=>$order_id,"total"=>$total,"payment_method"=>$payment_method]);
     $_SESSION["cart"] = [];
     send_order_confirmation($order_id, $email);
+    if ($methodType === 'square') {
+      $_SESSION['square_redirect_url'] = $squareRedirectUrl;
+      $_SESSION['square_redirect_warning'] = $squareWarning;
+    } else {
+      unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning']);
+    }
 
     header("Location: ?route=order_success&id=".$order_id);
     exit;
@@ -951,12 +1223,34 @@ if ($route === 'order_success') {
     $q = $pdo->query("SELECT track_token FROM orders WHERE id=".(int)$order_id);
     if ($q) { $track_code = (string)$q->fetchColumn(); }
   } catch (Throwable $e) {}
+  $squareRedirectSession = $_SESSION['square_redirect_url'] ?? null;
+  $squareWarningSession = $_SESSION['square_redirect_warning'] ?? null;
+  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning']);
 
   echo '<section class="max-w-3xl mx-auto px-4 py-16 text-center">';
   echo '  <div class="bg-white rounded-2xl shadow p-8">';
   echo '    <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><i class="fa-solid fa-check text-2xl"></i></div>';
   echo '    <h2 class="text-2xl font-bold mb-2">'.htmlspecialchars($d["thank_you_order"] ?? "Obrigado pelo seu pedido!").'</h2>';
   echo '    <p class="text-gray-600 mb-2">Pedido #'.$order_id.' recebido. Enviamos um e-mail com os detalhes.</p>';
+  if (!empty($squareWarningSession)) {
+    echo '    <div class="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>'.htmlspecialchars($squareWarningSession, ENT_QUOTES, "UTF-8").'</div>';
+  }
+  if (!empty($squareRedirectSession)) {
+    $safeSquare = htmlspecialchars($squareRedirectSession, ENT_QUOTES, "UTF-8");
+    $squareJs = json_encode($squareRedirectSession, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+    echo '    <div class="mt-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
+    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Abrimos o checkout Square em uma nova aba. Se não aparecer, <a class="underline" href="'.$safeSquare.'" target="_blank" rel="noopener">clique aqui para pagar</a>.';
+    echo '    </div>';
+    echo '    <script>
+      window.addEventListener("load", function(){
+        const key = "square_redirect_'.$order_id.'";
+        if (!window.sessionStorage.getItem(key)) {
+          window.open('.$squareJs.', "_blank");
+          window.sessionStorage.setItem(key, "1");
+        }
+      });
+    </script>';
+  }
   if ($track_code !== '') {
     echo '    <p class="mb-6">Acompanhe seu pedido: <a class="text-brand-700 underline" href="?route=track&code='.htmlspecialchars($track_code, ENT_QUOTES, "UTF-8").'">clique aqui</a></p>';
   }

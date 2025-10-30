@@ -125,6 +125,8 @@ function admin_header($title='Admin - FarmaFixed', $withLayout=true){
     echo '    <a class="'.$active(['categories.php']).'" href="categories.php"><i class="fa-solid fa-tags"></i><span>Categorias</span></a>';
     echo '    <a class="'.$active(['customers.php']).'" href="customers.php"><i class="fa-solid fa-users"></i><span>Clientes</span></a>';
     echo '    <a class="'.$active(['users.php']).'" href="users.php"><i class="fa-solid fa-user-shield"></i><span>Usuários</span></a>';
+    echo '    <a class="'.$active(['payment_methods.php']).'" href="payment_methods.php"><i class="fa-solid fa-credit-card"></i><span>Pagamentos</span></a>';
+    echo '    <a class="'.$active(['page_builder.php']).'" href="page_builder.php"><i class="fa-solid fa-paintbrush"></i><span>Editor da Home</span></a>';
     echo '    <a class="'.$active(['settings']).'" href="admin.php?route=settings"><i class="fa-solid fa-gear"></i><span>Configurações</span></a>';
     echo '  </nav></aside>';
     echo '  <main>';
@@ -146,12 +148,14 @@ function admin_hero($title, $subtitle='Gerencie sua loja com rapidez', $showQuic
   echo '        <div class="flex items-center gap-2">';
   echo '          <a href="orders.php" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-receipt"></i> Pedidos</a>';
   echo '          <a href="products.php" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-pills"></i> Produtos</a>';
+  echo '          <a href="page_builder.php" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-paintbrush"></i> Editor da Home</a>';
+  echo '          <a href="payment_methods.php" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-credit-card"></i> Pagamentos</a>';
   echo '          <a href="admin.php?route=settings" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-gear"></i> Configurações</a>';
   echo '          <a href="index.php" target="_blank" class="glass px-4 py-2 rounded-xl inline-flex items-center gap-2"><i class="fa-solid fa-store"></i> Ver loja</a>';
   echo '        </div>';
   echo '      </div>';
   if ($showQuickActions) {
-    echo '    <div class="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">';
+    echo '    <div class="mt-4 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">';
     echo '      <a href="orders.php" class="glass rounded-xl p-4 block">';
     echo '        <div class="text-sm opacity-90">Hoje</div>';
     echo '        <div class="flex items-center justify-between mt-1">';
@@ -177,6 +181,13 @@ function admin_hero($title, $subtitle='Gerencie sua loja com rapidez', $showQuic
     echo '        <div class="text-sm opacity-90">Base</div>';
     echo '        <div class="flex items-center justify-between mt-1">';
     echo '          <div class="text-lg font-semibold">Clientes</div>';
+    echo '          <i class="fa-solid fa-arrow-right-long"></i>';
+    echo '        </div>';
+    echo '      </a>';
+    echo '      <a href="payment_methods.php" class="glass rounded-xl p-4 block">';
+    echo '        <div class="text-sm opacity-90">Cobranças</div>';
+    echo '        <div class="flex items-center justify-between mt-1">';
+    echo '          <div class="text-lg font-semibold">Pagamentos</div>';
     echo '          <i class="fa-solid fa-arrow-right-long"></i>';
     echo '        </div>';
     echo '      </a>';

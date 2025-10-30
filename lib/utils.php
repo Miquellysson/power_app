@@ -86,6 +86,7 @@ if (!function_exists('get_default_dict')) {
             'venmo' => 'Venmo',
             'pix'   => 'PIX',
             'paypal'=> 'PayPal',
+            'square'=> 'Square',
             'upload_receipt' => 'Enviar Comprovante',
             'place_order' => 'Finalizar Pedido',
             'add_to_cart' => 'Adicionar ao Carrinho',

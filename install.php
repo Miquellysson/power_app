@@ -11,7 +11,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 // Carrega config (constantes DB_* e ADMIN_*) e conexão
-require __DIR__ . '/config.php';
+$configData = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/db.php';
 
 try {
@@ -48,6 +48,7 @@ try {
     price DECIMAL(10,2) NOT NULL,
     stock INT NOT NULL DEFAULT 100,
     image_path VARCHAR(255) NULL,
+    square_payment_link VARCHAR(255) NULL,
     active TINYINT(1) DEFAULT 1,
     featured TINYINT(1) DEFAULT 0,
     meta_title VARCHAR(255) NULL,
@@ -127,11 +128,43 @@ try {
     UNIQUE KEY uniq_settings_skey (skey)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
+  // ===== PAGE LAYOUTS (builder visual) =====
+  $pdo->exec("CREATE TABLE IF NOT EXISTS page_layouts (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    page_slug VARCHAR(100) NOT NULL,
+    status ENUM('draft','published') NOT NULL DEFAULT 'draft',
+    content LONGTEXT,
+    styles LONGTEXT,
+    meta JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_layout_slug_status (page_slug, status)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+  // ===== PAYMENT METHODS =====
+  $pdo->exec("CREATE TABLE IF NOT EXISTS payment_methods (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    instructions LONGTEXT NULL,
+    settings JSON NULL,
+    icon_path VARCHAR(255) NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    require_receipt TINYINT(1) DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_payment_code (code)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
   // ===== ALTERs idempotentes para colunas faltantes =====
   $tables_columns = [
-    'products'  => ['category_id','active','featured','meta_title','meta_description','updated_at'],
-    'customers' => ['city','state','zipcode','country'],
-    'orders'    => ['shipping_cost','total','payment_status','admin_viewed','notes','updated_at','track_token']
+    'products'        => ['category_id','square_payment_link','active','featured','meta_title','meta_description','updated_at'],
+    'customers'       => ['city','state','zipcode','country'],
+    'orders'          => ['shipping_cost','total','payment_status','admin_viewed','notes','updated_at','track_token'],
+    'page_layouts'    => ['meta'],
+    'payment_methods' => ['description','instructions','settings','icon_path','require_receipt','sort_order']
   ];
 
   foreach ($tables_columns as $table => $columns) {
@@ -144,6 +177,9 @@ try {
             break;
           case 'products.active':
             $pdo->exec("ALTER TABLE products ADD COLUMN active TINYINT(1) DEFAULT 1");
+            break;
+          case 'products.square_payment_link':
+            $pdo->exec("ALTER TABLE products ADD COLUMN square_payment_link VARCHAR(255) NULL AFTER image_path");
             break;
           case 'products.featured':
             $pdo->exec("ALTER TABLE products ADD COLUMN featured TINYINT(1) DEFAULT 0");
@@ -189,6 +225,27 @@ try {
             break;
           case 'orders.track_token':
             $pdo->exec("ALTER TABLE orders ADD COLUMN track_token VARCHAR(64) DEFAULT NULL");
+            break;
+          case 'page_layouts.meta':
+            $pdo->exec("ALTER TABLE page_layouts ADD COLUMN meta JSON AFTER styles");
+            break;
+          case 'payment_methods.description':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN description TEXT NULL AFTER name");
+            break;
+          case 'payment_methods.instructions':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN instructions LONGTEXT NULL AFTER description");
+            break;
+          case 'payment_methods.settings':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN settings JSON NULL AFTER instructions");
+            break;
+          case 'payment_methods.icon_path':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN icon_path VARCHAR(255) NULL AFTER settings");
+            break;
+          case 'payment_methods.require_receipt':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN require_receipt TINYINT(1) DEFAULT 0 AFTER is_active");
+            break;
+          case 'payment_methods.sort_order':
+            $pdo->exec("ALTER TABLE payment_methods ADD COLUMN sort_order INT DEFAULT 0 AFTER require_receipt");
             break;
         }
       }
@@ -258,6 +315,115 @@ try {
 
   // Ajusta total em pedidos antigos
   $pdo->exec("UPDATE orders SET total = subtotal + shipping_cost WHERE total = 0");
+
+  // ===== Seed payment methods =====
+  try {
+    $count = (int)$pdo->query("SELECT COUNT(*) FROM payment_methods")->fetchColumn();
+    if ($count === 0) {
+      $paymentsCfg = $configData['payments'] ?? [];
+      $defaults = [];
+
+      if (!empty($paymentsCfg['pix'])) {
+        $defaults[] = [
+          'code' => 'pix',
+          'name' => 'Pix',
+          'instructions' => "Use o Pix para pagar seu pedido. Valor: {valor_pedido}.\\nChave: {pix_key}",
+          'settings' => [
+            'type' => 'pix',
+            'account_label' => 'Chave Pix',
+            'account_value' => $paymentsCfg['pix']['pix_key'] ?? '',
+            'pix_key' => $paymentsCfg['pix']['pix_key'] ?? '',
+            'merchant_name' => $paymentsCfg['pix']['merchant_name'] ?? '',
+            'merchant_city' => $paymentsCfg['pix']['merchant_city'] ?? '',
+            'currency' => 'BRL'
+          ],
+          'require_receipt' => 0,
+          'sort_order' => 10
+        ];
+      }
+
+      if (!empty($paymentsCfg['zelle'])) {
+        $defaults[] = [
+          'code' => 'zelle',
+          'name' => 'Zelle',
+          'instructions' => "Envie o valor de {valor_pedido} via Zelle para {account_value}. Anexe o comprovante se solicitado.",
+          'settings' => [
+            'type' => 'zelle',
+            'account_label' => 'Conta Zelle',
+            'account_value' => $paymentsCfg['zelle']['recipient_email'] ?? '',
+            'recipient_name' => $paymentsCfg['zelle']['recipient_name'] ?? ''
+          ],
+          'require_receipt' => (int)($paymentsCfg['zelle']['require_receipt_upload'] ?? 1),
+          'sort_order' => 20
+        ];
+      }
+
+      if (!empty($paymentsCfg['venmo'])) {
+        $defaults[] = [
+          'code' => 'venmo',
+          'name' => 'Venmo',
+          'instructions' => "Pague {valor_pedido} via Venmo. Link: {venmo_link}.",
+          'settings' => [
+            'type' => 'venmo',
+            'account_label' => 'Link Venmo',
+            'venmo_link' => $paymentsCfg['venmo']['handle'] ?? ''
+          ],
+          'require_receipt' => 1,
+          'sort_order' => 30
+        ];
+      }
+
+      if (!empty($paymentsCfg['paypal'])) {
+        $defaults[] = [
+          'code' => 'paypal',
+          'name' => 'PayPal',
+          'instructions' => "Após finalizar, você será direcionado ao PayPal com o valor {valor_pedido}.",
+          'settings' => [
+            'type' => 'paypal',
+            'business' => $paymentsCfg['paypal']['business'] ?? '',
+            'account_value' => $paymentsCfg['paypal']['business'] ?? '',
+            'currency' => $paymentsCfg['paypal']['currency'] ?? 'USD',
+            'return_url' => $paymentsCfg['paypal']['return_url'] ?? '',
+            'cancel_url' => $paymentsCfg['paypal']['cancel_url'] ?? ''
+          ],
+          'require_receipt' => 0,
+          'sort_order' => 40
+        ];
+      }
+
+      if (!empty($paymentsCfg['square'])) {
+        $defaults[] = [
+          'code' => 'square',
+          'name' => 'Square',
+          'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout Square em uma nova aba.',
+          'settings' => [
+            'type' => 'square',
+            'mode' => 'square_product_link',
+            'open_new_tab' => (bool)($paymentsCfg['square']['open_new_tab'] ?? true)
+          ],
+          'require_receipt' => 0,
+          'sort_order' => 50
+        ];
+      }
+
+      if ($defaults) {
+        $ins = $pdo->prepare("INSERT INTO payment_methods(code,name,instructions,settings,require_receipt,sort_order) VALUES (?,?,?,?,?,?)");
+        foreach ($defaults as $pm) {
+          $settingsJson = json_encode($pm['settings'], JSON_UNESCAPED_UNICODE);
+          $ins->execute([
+            $pm['code'],
+            $pm['name'],
+            $pm['instructions'],
+            $settingsJson,
+            (int)$pm['require_receipt'],
+            (int)$pm['sort_order']
+          ]);
+        }
+      }
+    }
+  } catch (Throwable $e) {
+    error_log('Seed payment_methods falhou: '.$e->getMessage());
+  }
 
   // ===== Saída =====
   $created_count = count($categories);

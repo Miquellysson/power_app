@@ -57,6 +57,11 @@ return [
             'return_url' => 'https://victorfarmafacil.com/index.php?route=checkout_complete',
             'cancel_url' => 'https://victorfarmafacil.com/index.php?route=checkout_cancel',
         ],
+        'square' => [
+            'enabled'      => true,
+            'instructions' => 'Abriremos o checkout Square em uma nova aba para concluir o pagamento.',
+            'open_new_tab' => true,
+        ],
     ],
     'paths' => [
         'zelle_receipts' => __DIR__ . '/storage/zelle_receipts',

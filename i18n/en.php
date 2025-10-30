@@ -15,6 +15,7 @@ return [
   'venmo' => 'Venmo',
   'pix' => 'Pix',
   'paypal' => 'PayPal',
+  'square' => 'Square',
   'upload_receipt' => 'Upload Receipt',
   'place_order' => 'Place Order',
   'order_received' => 'Order received!',

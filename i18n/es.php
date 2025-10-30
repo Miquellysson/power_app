@@ -15,6 +15,7 @@ return [
   'venmo' => 'Venmo',
   'pix' => 'Pix',
   'paypal' => 'PayPal',
+  'square' => 'Square',
   'upload_receipt' => 'Subir comprobante',
   'place_order' => 'Confirmar Pedido',
   'order_received' => '¡Pedido recibido!',

@@ -65,6 +65,36 @@ function sku_exists(PDO $pdo, string $sku, ?int $ignoreId = null): bool {
   return (bool) $st->fetchColumn();
 }
 
+/** Valida e normaliza uma URL do Square (aceita subdomínios válidos). */
+function normalize_square_link(string $input): array {
+  $url = trim($input);
+  if ($url === '') {
+    return [true, '', null];
+  }
+  if (strlen($url) > 255) {
+    return [false, $url, 'O link do Square deve ter até 255 caracteres.'];
+  }
+  if (!filter_var($url, FILTER_VALIDATE_URL)) {
+    return [false, $url, 'Informe uma URL válida do Square.'];
+  }
+  $parts = parse_url($url);
+  $scheme = strtolower($parts['scheme'] ?? '');
+  if ($scheme !== 'https') {
+    return [false, $url, 'O link do Square deve começar com https://'];
+  }
+  $host = strtolower($parts['host'] ?? '');
+  $allowed = ['square.link', 'checkout.square.site', 'squareup.com'];
+  $match = false;
+  foreach ($allowed as $domain) {
+    if ($host === $domain) { $match = true; break; }
+    if (substr($host, -strlen('.'.$domain)) === '.'.$domain) { $match = true; break; }
+  }
+  if (!$match) {
+    return [false, $url, 'Domínio não permitido. Use links square.link, checkout.square.site ou squareup.com.'];
+  }
+  return [true, $url, null];
+}
+
 /** Formulário de produto (reutilizável) */
 function product_form($row){
   $id = (int)($row['id'] ?? 0);
@@ -77,6 +107,7 @@ function product_form($row){
   $active = (int)($row['active'] ?? 1);
   $featured = (int)($row['featured'] ?? 0);
   $img = sanitize_html($row['image_path'] ?? '');
+  $square_link = sanitize_html($row['square_payment_link'] ?? '');
   $csrf = csrf_token();
 
   echo '<form class="p-4 space-y-3" method="post" enctype="multipart/form-data" action="products.php?action='.($id?'update&id='.$id:'create').'">';
@@ -89,6 +120,13 @@ function product_form($row){
   echo '    <div class="field"><span>Categoria</span><select class="select" name="category_id">'.categories_options($GLOBALS["pdo"], $category_id).'</select></div>';
   echo '    <div class="field"><span>Ativo</span><select class="select" name="active"><option value="1" '.($active? 'selected':'').'>Sim</option><option value="0" '.(!$active? 'selected':'').'>Não</option></select></div>';
   echo '    <div class="field"><span>Destaque</span><select class="select" name="featured"><option value="0" '.(!$featured? 'selected':'').'>Não</option><option value="1" '.($featured? 'selected':'').'>Sim</option></select></div>';
+  echo '    <div class="field md:col-span-2"><span>Link de Pagamento Square</span>';
+  echo '      <input class="input" type="url" name="square_payment_link" value="'.$square_link.'" placeholder="https://square.link/u/xxxx">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Cole aqui o link gerado no Square (aceita square.link, checkout.square.site ou squareup.com).</p>';
+  if ($square_link) {
+    echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_link.'" target="_blank" rel="noopener">Testar link</a></p>';
+  }
+  echo '    </div>';
   echo '  </div>';
   echo '  <div class="field"><span>Descrição</span><textarea class="textarea" name="description" rows="4">'.$desc.'</textarea></div>';
   echo '  <div class="field"><span>Imagem do produto (JPG/PNG/WEBP)</span><input class="input" type="file" name="image" accept=".jpg,.jpeg,.png,.webp"></div>';
@@ -119,6 +157,20 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $active = (int)($_POST['active'] ?? 1);
   $featured = (int)($_POST['featured'] ?? 0);
   $image_path = null;
+  $square_input = (string)($_POST['square_payment_link'] ?? '');
+  [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
+  if (!$square_ok) {
+    admin_header('Novo produto');
+    echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($square_error).'</div>';
+    product_form([
+      'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+      'square_payment_link'=>$square_input
+    ]);
+    echo '</div>';
+    admin_footer(); exit;
+  }
 
   // Checagem de SKU duplicado (antes de gravar)
   if ($sku === '' || sku_exists($pdo, $sku, null)) {
@@ -128,7 +180,8 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     // Re-exibe formulário com os dados postados
     product_form([
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null
+      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+      'square_payment_link'=>$square_input
     ]);
     echo '</div>';
     admin_footer(); exit;
@@ -144,9 +197,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,NOW())");
+  $st=$pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NOW())");
   try {
-    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path]);
+    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path,$square_link]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     // Proteção extra caso outro processo crie o mesmo SKU no intervalo
@@ -156,7 +209,8 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> SKU duplicado no banco. Tente outro valor.</div>';
       product_form([
         'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-        'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null
+        'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+        'square_payment_link'=>$square_input
       ]);
       echo '</div>';
       admin_footer(); exit;
@@ -195,6 +249,20 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   $active = (int)($_POST['active'] ?? 1);
   $featured = (int)($_POST['featured'] ?? 0);
   $image_path = $cur;
+  $square_input = (string)($_POST['square_payment_link'] ?? '');
+  [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
+  if (!$square_ok) {
+    admin_header('Editar produto');
+    echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($square_error).'</div>';
+    product_form([
+      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+      'square_payment_link'=>$square_input
+    ]);
+    echo '</div>';
+    admin_footer(); exit;
+  }
 
   // Checagem de SKU duplicado (exclui o próprio ID)
   if ($sku === '' || sku_exists($pdo, $sku, $id)) {
@@ -203,7 +271,8 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> SKU já utilizado por outro produto: <b>'.sanitize_html($sku).'</b>.</div>';
     product_form([
       'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path
+      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+      'square_payment_link'=>$square_input
     ]);
     echo '</div>';
     admin_footer(); exit;
@@ -219,9 +288,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=? WHERE id=?");
+  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=? WHERE id=?");
   try {
-    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path,$id]);
+    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$id]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     if (!empty($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062) {
@@ -230,7 +299,8 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
       echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> SKU duplicado no banco. Tente outro valor.</div>';
       product_form([
         'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-        'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path
+        'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+        'square_payment_link'=>$square_input
       ]);
       echo '</div>';
       admin_footer(); exit;
@@ -265,7 +335,7 @@ $st->execute($p);
 echo '<div class="card">';
 echo '<div class="card-title">Produtos</div>';
 echo '<div class="p-3 row gap"><form method="get" class="row gap search"><input type="hidden" name="action" value="list"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome ou SKU"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form><a class="btn alt" href="products.php?action=new"><i class="fa-solid fa-plus"></i> Novo</a></div>';
-echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Ativo</th><th></th></tr></thead><tbody>';
+echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
 foreach($st as $r){
   echo '<tr>';
   echo '<td>'.(int)$r['id'].'</td>';
@@ -274,6 +344,13 @@ foreach($st as $r){
   echo '<td>'.sanitize_html($r['category_name']).'</td>';
   echo '<td>$ '.number_format((float)$r['price'],2,',','.').'</td>';
   echo '<td>'.(int)$r['stock'].'</td>';
+  $squareCol = trim((string)($r['square_payment_link'] ?? ''));
+  if ($squareCol !== '') {
+    $safeLink = sanitize_html($squareCol);
+    echo '<td><span class="badge ok">Config.</span> <a class="text-sm text-brand-600 underline ml-1" href="'.$safeLink.'" target="_blank" rel="noopener">Testar</a></td>';
+  } else {
+    echo '<td><span class="badge danger">Pendente</span></td>';
+  }
   echo '<td>'.((int)$r['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
   echo '<td><a class="btn" href="products.php?action=edit&id='.(int)$r['id'].'"><i class="fa-solid fa-pen"></i> Editar</a> <a class="btn" href="products.php?action=delete&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Desativar este produto?\')"><i class="fa-solid fa-trash"></i> Desativar</a></td>';
   echo '</tr>';
