@@ -48,6 +48,7 @@ try {
     name VARCHAR(190) NOT NULL,
     description TEXT,
     price DECIMAL(10,2) NOT NULL,
+    price_compare DECIMAL(10,2) NULL,
     shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00,
     stock INT NOT NULL DEFAULT 100,
     image_path VARCHAR(255) NULL,
@@ -164,7 +165,7 @@ try {
 
   // ===== ALTERs idempotentes para colunas faltantes =====
   $tables_columns = [
-    'products'        => ['category_id','square_payment_link','stripe_payment_link','active','featured','meta_title','meta_description','updated_at','shipping_cost'],
+    'products'        => ['category_id','square_payment_link','stripe_payment_link','active','featured','meta_title','meta_description','updated_at','shipping_cost','price_compare'],
     'customers'       => ['city','state','zipcode','country'],
     'orders'          => ['shipping_cost','total','payment_status','admin_viewed','notes','updated_at','track_token'],
     'page_layouts'    => ['meta'],
@@ -204,6 +205,9 @@ try {
           case 'products.shipping_cost':
             $pdo->exec("ALTER TABLE products ADD COLUMN shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00 AFTER price");
             $pdo->exec("UPDATE products SET shipping_cost = 7.00 WHERE shipping_cost IS NULL");
+            break;
+          case 'products.price_compare':
+            $pdo->exec("ALTER TABLE products ADD COLUMN price_compare DECIMAL(10,2) NULL AFTER price");
             break;
           case 'customers.city':
             $pdo->exec("ALTER TABLE customers ADD COLUMN city VARCHAR(100)");
@@ -280,6 +284,90 @@ try {
   try {
     $pdo->exec("UPDATE products SET shipping_cost = 7.00 WHERE shipping_cost IS NULL");
   } catch (Throwable $e) {}
+  try {
+    $orderIds = $pdo->query("SELECT id FROM orders WHERE track_token IS NULL OR track_token = ''")->fetchAll(PDO::FETCH_COLUMN);
+    if ($orderIds) {
+      $updTrack = $pdo->prepare("UPDATE orders SET track_token = ? WHERE id = ?");
+      foreach ($orderIds as $orderId) {
+        $token = bin2hex(random_bytes(16));
+        $updTrack->execute([$token, (int)$orderId]);
+      }
+    }
+  } catch (Throwable $e) {
+    error_log('Falha ao gerar track_token: ' . $e->getMessage());
+  }
+  try {
+    $storeNameDefault = 'Victor Farma Fácil';
+    $emailCustomerSubjectDefault = "Seu pedido {{order_id}} foi recebido - {$storeNameDefault}";
+    $emailCustomerBodyDefault = <<<HTML
+<p>Olá {{customer_name}},</p>
+<p>Recebemos seu pedido <strong>#{{order_id}}</strong> na {{store_name}}.</p>
+<p><strong>Resumo do pedido:</strong></p>
+{{order_items}}
+<p><strong>Subtotal:</strong> {{order_subtotal}}<br>
+<strong>Frete:</strong> {{order_shipping}}<br>
+<strong>Total:</strong> {{order_total}}</p>
+<p>Forma de pagamento: {{payment_method}}</p>
+<p>Status e atualização: {{track_link}}</p>
+<p>Qualquer dúvida, responda este e-mail ou fale com a gente em {{support_email}}.</p>
+<p>Equipe {{store_name}}</p>
+HTML;
+    $emailAdminSubjectDefault = "Novo pedido #{{order_id}} - {$storeNameDefault}";
+    $emailAdminBodyDefault = <<<HTML
+<h2>Novo pedido recebido</h2>
+<p><strong>Loja:</strong> {{store_name}}</p>
+<p><strong>Pedido:</strong> #{{order_id}}</p>
+<p><strong>Cliente:</strong> {{customer_name}} &lt;{{customer_email}}&gt; — {{customer_phone}}</p>
+<p><strong>Total:</strong> {{order_total}} &nbsp;|&nbsp; <strong>Pagamento:</strong> {{payment_method}}</p>
+{{order_items}}
+<p><strong>Endereço:</strong><br>{{shipping_address}}</p>
+<p><strong>Observações:</strong> {{order_notes}}</p>
+<p>Painel: <a href="{{admin_order_url}}">{{admin_order_url}}</a></p>
+HTML;
+
+    $settingsDefaults = [
+      'store_name'            => $storeNameDefault,
+      'store_email'           => 'contato@farmafacil.com',
+      'store_phone'           => '(82) 99999-9999',
+      'store_address'         => 'Maceió, Alagoas, Brasil',
+      'store_meta_title'      => $storeNameDefault.' | Loja',
+      'home_hero_title'       => 'Tudo para sua saúde',
+      'home_hero_subtitle'    => 'Experiência de app, rápida e segura.',
+      'header_subline'        => 'Farmácia Online',
+      'footer_title'          => $storeNameDefault,
+      'footer_description'    => 'Sua farmácia online com experiência de app.',
+      'theme_color'           => '#2060C8',
+      'whatsapp_button_text'  => 'Fale com a gente',
+      'whatsapp_message'      => 'Olá! Gostaria de tirar uma dúvida sobre os produtos.',
+      'store_currency'        => 'USD',
+      'pwa_name'              => $storeNameDefault,
+      'pwa_short_name'        => 'Victor Farma',
+      'home_featured_enabled' => '0',
+      'home_featured_title'   => 'Ofertas em destaque',
+      'home_featured_subtitle'=> 'Seleção especial com preços imperdíveis.',
+      'email_customer_subject'=> $emailCustomerSubjectDefault,
+      'email_customer_body'   => $emailCustomerBodyDefault,
+      'email_admin_subject'   => $emailAdminSubjectDefault,
+      'email_admin_body'      => $emailAdminBodyDefault,
+    ];
+    if ($settingsDefaults) {
+      $keys = array_keys($settingsDefaults);
+      $placeholders = implode(',', array_fill(0, count($keys), '?'));
+      $existingStmt = $pdo->prepare("SELECT skey FROM settings WHERE skey IN ($placeholders)");
+      $existingStmt->execute($keys);
+      $existingKeys = $existingStmt->fetchAll(PDO::FETCH_COLUMN);
+      $existingLookup = array_fill_keys($existingKeys, true);
+
+      $insertStmt = $pdo->prepare("INSERT INTO settings (skey, svalue) VALUES (?, ?)");
+      foreach ($settingsDefaults as $skey => $svalue) {
+        if (!isset($existingLookup[$skey])) {
+          $insertStmt->execute([$skey, $svalue]);
+        }
+      }
+    }
+  } catch (Throwable $e) {
+    error_log('Seed settings falhou: ' . $e->getMessage());
+  }
 
   // ===== Admin seed =====
   // As constantes ADMIN_EMAIL e ADMIN_PASS_HASH vêm do config.php

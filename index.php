@@ -733,6 +733,11 @@ if ($route === 'home') {
   $heroBackground = setting_get('hero_background', 'gradient');
   $heroAccentColor = setting_get('hero_accent_color', '#F59E0B');
   $heroBackgroundImage = setting_get('hero_background_image', '');
+  $featuredEnabled = (int)setting_get('home_featured_enabled', '0') === 1;
+  $featuredTitle = setting_get('home_featured_title', 'Ofertas em destaque');
+  $featuredSubtitle = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
+  $featuredTitleHtml = htmlspecialchars($featuredTitle, ENT_QUOTES, 'UTF-8');
+  $featuredSubtitleHtml = htmlspecialchars($featuredSubtitle, ENT_QUOTES, 'UTF-8');
 
   if ($hasCustomLayout) {
     if ($builderCss !== '') {
@@ -824,67 +829,84 @@ if ($route === 'home') {
   echo '  </div>';
   echo '</section>';
 
-  // Sessões destaque antes da listagem
-  echo '<section class="max-w-7xl mx-auto px-4 mb-10">';
-  echo '  <div class="rounded-3xl bg-gradient-to-r from-[#2060C8] to-[#3A7BFF] text-white p-8 shadow-lg">';
-  echo '    <div class="grid gap-6 md:grid-cols-3 md:gap-8 items-start">';
-  echo '      <div class="flex items-start gap-4">';
-  echo '        <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-white/15 grid place-items-center">';
-  echo '          <svg width="48" height="40" viewBox="0 0 72 56" fill="none" xmlns="http://www.w3.org/2000/svg">';
-  echo '            <path d="M20.8316 38.2055C17.3093 38.2055 13.9471 38.2055 10.5877 38.2055C10.1664 38.2055 9.74509 38.2055 9.32376 38.2055C8.34347 38.1971 7.63845 37.7758 7.66935 36.7337C7.69743 35.7702 8.37998 35.3882 9.3041 35.391C11.9248 35.3939 14.5454 35.391 17.1689 35.391C18.3317 35.391 19.4946 35.391 20.7445 35.391V28.0965C19.4131 28.0965 18.0312 28.0965 16.652 28.0965C15.4808 28.0965 14.3123 28.0852 13.141 28.0965C12.1579 28.1077 11.4248 27.7173 11.4192 26.6892C11.4135 25.664 12.1326 25.2623 13.1241 25.2708C15.183 25.2876 17.2447 25.2736 19.3036 25.2736C19.7614 25.2736 20.2193 25.2736 20.7558 25.2736V20.2261C20.2783 20.2261 19.7867 20.2261 19.2952 20.2261C14.6128 20.2261 9.93328 20.2598 5.25374 20.1867C4.62174 20.1783 3.75662 19.8019 3.42237 19.3076C2.78476 18.3666 3.67516 17.4172 5.13576 17.4116C9.81531 17.3976 14.4977 17.406 19.18 17.406C19.6828 17.406 20.1884 17.406 20.6322 17.406C20.7333 17.2009 20.8204 17.1111 20.8063 17.0408C20.3007 14.3724 21.6967 13.1056 23.9466 11.9315C30.9912 8.25756 37.9235 4.35887 44.8641 0.488278C45.9849 -0.138095 46.8584 -0.124051 47.9735 0.496705C55.4507 4.65661 62.9531 8.77158 70.4752 12.85C71.5594 13.4371 72.0398 14.1281 71.9976 15.3808C71.9162 17.906 71.9555 20.4367 71.9808 22.9619C71.992 24.0264 71.7196 24.9337 70.5117 24.9028C69.3994 24.8747 69.1326 24.004 69.1466 22.9956C69.1747 21.0491 69.1551 19.1053 69.1551 16.92C66.9866 18.1082 65.012 19.1503 63.0936 20.2879C62.8014 20.462 62.6413 21.0659 62.6329 21.476C62.5852 23.4422 62.5824 25.4084 62.6217 27.3746C62.6413 28.383 62.2537 29.043 61.3521 29.5009C59.9364 30.22 58.5657 31.0317 57.1613 31.7789C55.5041 32.658 54.5996 32.0991 54.5828 30.1834C54.5659 28.5122 54.5799 26.8437 54.5799 24.9337C52.3469 26.1555 50.3021 27.2482 48.2909 28.4026C48.0438 28.5459 47.8415 28.9981 47.8387 29.3099C47.8134 36.7505 47.819 44.1912 47.819 51.8003C48.2488 51.6234 48.5802 51.5223 48.8808 51.3594C55.3187 47.8314 61.7453 44.2839 68.1916 40.7756C68.8967 40.3908 69.2197 39.9779 69.1747 39.1493C69.1045 37.7954 69.1579 36.4359 69.1551 35.0765C69.1551 34.099 69.5286 33.3968 70.6016 33.4164C71.5932 33.4333 71.9639 34.1018 71.9667 35.0175C71.9723 36.9359 72.0454 38.86 71.9218 40.7728C71.8853 41.3514 71.4246 42.1379 70.9275 42.416C63.1301 46.7669 55.3018 51.0672 47.4455 55.3114C46.9006 55.6063 45.9231 55.6063 45.381 55.3114C37.5218 51.0672 29.6935 46.7697 21.899 42.4132C21.3793 42.1239 21.0423 41.284 20.8822 40.638C20.708 39.9358 20.8429 39.1549 20.8429 38.1999L20.8316 38.2055ZM23.7669 16.9875C23.7051 17.3133 23.6573 17.4453 23.6545 17.5773C23.6489 24.827 23.6292 32.0738 23.691 39.3234C23.6938 39.8094 24.2022 40.4891 24.6629 40.7447C31.0671 44.3204 37.5021 47.8399 43.9316 51.365C44.2293 51.5279 44.5608 51.629 44.9877 51.8032C44.9877 45.2276 44.8136 38.815 45.0664 32.4193C45.1815 29.5599 44.3445 28.0599 41.7547 26.7651C35.7045 23.7427 29.8536 20.3272 23.7669 16.9875ZM52.8553 22.6445C52.7064 22.4394 52.6699 22.3355 52.5969 22.2962C45.8922 18.6082 39.1875 14.9173 32.4715 11.2518C32.185 11.0973 31.7075 10.9934 31.4575 11.1254C29.4155 12.1928 27.4071 13.3219 25.3651 14.4426C25.5168 14.6336 25.5589 14.7348 25.6319 14.7741C32.3339 18.4649 39.0358 22.1586 45.7573 25.8157C46.0888 25.9954 46.6758 25.9983 47.0101 25.8269C48.9566 24.8213 50.8638 23.7399 52.8525 22.6473L52.8553 22.6445ZM40.1846 6.30541C40.3615 6.52169 40.4037 6.62 40.4795 6.66213C47.1533 10.3361 53.83 14.0073 60.5122 17.6672C60.7819 17.8133 61.2004 18.0099 61.4026 17.9031C63.4306 16.8442 65.4305 15.7263 67.6102 14.5297C60.5853 10.6704 53.83 6.95144 47.055 3.26904C46.718 3.08646 46.1253 3.08085 45.7854 3.255C43.9176 4.21562 42.0918 5.2549 40.1874 6.30541H40.1846ZM34.9657 9.33896C35.4938 9.64232 35.9264 9.89793 36.3702 10.1423C42.3895 13.4511 48.4454 16.6953 54.4058 20.1109C55.8861 20.9592 56.8607 20.6558 58.0938 19.6306C57.577 19.3216 57.1613 19.0576 56.7315 18.8188C50.7543 15.5325 44.7405 12.3079 38.8167 8.92325C37.3533 8.08622 36.2662 8.07217 34.9686 9.33615L34.9657 9.33896ZM59.7707 22.3439C59.6443 22.2625 59.5207 22.181 59.3943 22.0996C58.7258 22.6979 57.6416 23.2006 57.4815 23.9141C57.1725 25.2736 57.3916 26.7538 57.3916 28.1835C57.504 28.265 57.6191 28.3493 57.7315 28.4307C58.4112 27.8296 59.5151 27.3296 59.6808 26.6106C59.9954 25.2539 59.7707 23.7736 59.7707 22.3439Z" fill="white"></path>';
-  echo '          </svg>';
-  echo '        </div>';
-  echo '        <div>';
-  echo '          <h3 class="text-xl font-semibold mb-1">Entrega garantida</h3>';
-  echo '          <p class="text-white/90 text-sm leading-relaxed">Entrega rápida e segura em todo o EUA.</p>';
-  echo '        </div>';
-  echo '      </div>';
-  echo '      <div class="flex items-start gap-4">';
-  echo '        <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-white/15 grid place-items-center">';
-  echo '          <svg width="40" height="32" viewBox="0 0 55 43" fill="none" xmlns="http://www.w3.org/2000/svg">';
-  echo '            <path d="M7.35118 10.7946C7.59322 8.52367 7.85209 6.3727 8.04783 4.21542C8.31512 1.2773 9.97991 -0.21491 12.9412 0.025022C22.0607 0.763761 31.176 1.53828 40.2935 2.30017C43.6462 2.58009 47.0052 2.81792 50.3517 3.15466C52.8562 3.40722 54.3148 5.16673 54.119 7.69022C53.7065 13.0382 53.2308 18.3798 52.7804 23.7236C52.6037 25.8198 52.3932 27.914 52.2627 30.0123C52.0354 33.6303 50.5895 34.9667 46.9989 34.8005C46.8621 34.7941 46.7232 34.8005 46.4222 34.8005C46.4222 35.9412 46.4286 37.0461 46.4222 38.1511C46.4054 41.0724 44.8543 42.6446 41.9435 42.6467C29.5639 42.653 17.1842 42.653 4.80664 42.6467C1.84116 42.6467 0.266867 41.0555 0.264762 38.0943C0.262657 30.5196 0.262657 22.9449 0.264762 15.3702C0.264762 12.4341 1.88536 10.8093 4.80664 10.7946C5.61062 10.7904 6.41671 10.7946 7.35329 10.7946H7.35118ZM44.3071 25.6788H2.37995C2.37995 30.0776 2.3568 34.39 2.39469 38.7004C2.40521 39.8769 3.26181 40.5294 4.63405 40.5294C17.1189 40.5357 29.6059 40.5378 42.0908 40.5294C43.642 40.5294 44.2923 39.8369 44.3007 38.2479C44.3134 36.0738 44.305 33.8997 44.305 31.7234C44.305 29.7282 44.305 27.7351 44.305 25.6788H44.3071ZM46.4222 32.5569C49.3162 33.0536 49.9833 32.5232 50.1559 29.7745C50.2359 28.4801 50.3811 27.1921 50.4885 25.8998C50.9978 19.8236 51.5134 13.7496 52.008 7.67128C52.1322 6.14119 51.5134 5.39614 49.9497 5.22355C48.4175 5.05518 46.8769 4.9731 45.3404 4.84261C34.8318 3.95654 24.3211 3.07258 13.8125 2.17599C11.4448 1.97394 10.1735 1.87713 10.0894 5.19409C10.0851 5.333 10.0409 5.4698 10.0262 5.60871C9.85153 7.30086 9.68105 8.99512 9.49794 10.7946H10.8639C21.101 10.7946 31.336 10.8472 41.5731 10.7588C44.2313 10.7357 46.5485 12.2237 46.458 15.6816C46.3212 20.9012 46.4222 26.1271 46.4222 31.3509C46.4222 31.7319 46.4222 32.1128 46.4222 32.5548V32.5569ZM2.43257 23.4079H44.2166V19.2364H2.43257V23.4079ZM2.44099 16.9739H44.1829C44.6143 13.859 44.1324 12.8551 40.9754 12.8761C29.3092 12.9561 17.6409 12.9582 5.97262 12.8761C2.39048 12.8509 2.1758 13.8443 2.44099 16.9739Z" fill="white"></path>';
-  echo '            <path d="M34.8717 37.4629C33.2974 37.4629 31.721 37.4566 30.1467 37.4629C29.1996 37.4672 28.7176 37.0294 28.7197 36.0633C28.726 34.0681 28.7239 32.0729 28.7197 30.0777C28.7197 29.1095 29.2206 28.697 30.1656 28.6991C33.2805 28.7096 36.3955 28.6949 39.5104 28.7075C40.6237 28.7117 40.9542 29.0422 40.9647 30.1492C40.9836 32.1087 40.9836 34.0702 40.9647 36.0297C40.9542 37.1241 40.6174 37.444 39.4914 37.4566C37.9508 37.4756 36.4123 37.4608 34.8717 37.4608V37.4629ZM38.7948 30.8943H30.9338V35.2783H38.7948V30.8943Z" fill="white"></path>';
-  echo '          </svg>';
-  echo '        </div>';
-  echo '        <div>';
-  echo '          <h3 class="text-xl font-semibold mb-1">Site 100% seguro</h3>';
-  echo '          <p class="text-white/90 text-sm leading-relaxed">Pagamentos protegidos pela nossa rede de segurança privada.</p>';
-  echo '        </div>';
-  echo '      </div>';
-  echo '      <div class="flex items-start gap-4">';
-  echo '        <div class="flex-shrink-0 w-16 h-16 rounded-2xl bg-white/15 grid place-items-center">';
-  echo '          <svg width="42" height="34" viewBox="0 0 51 42" fill="none" xmlns="http://www.w3.org/2000/svg">';
-  echo '            <path d="M18.9996 41.8425C13.4744 41.8425 7.94715 41.8425 2.42193 41.8425C0.818876 41.8425 0.271785 41.3376 0.301955 39.7648C0.340171 37.7614 0.213456 35.7159 0.569467 33.7628C1.41625 29.1307 5.58983 25.7838 10.3145 25.7556C16.1414 25.7214 21.9704 25.7154 27.7973 25.7556C33.2139 25.7938 37.6188 30.1323 37.7958 35.5489C37.844 37.0213 37.8239 38.4956 37.8078 39.9699C37.7938 41.2833 37.2205 41.8385 35.8789 41.8405C30.2532 41.8465 24.6254 41.8425 18.9996 41.8425ZM3.62272 38.5579H34.5796C34.5796 37.5683 34.6037 36.6371 34.5756 35.7058C34.4589 31.9566 31.464 28.9959 27.7007 28.9778C21.9382 28.9476 16.1756 28.9517 10.4111 28.9778C7.08628 28.9919 4.19998 31.3512 3.65892 34.6076C3.44974 35.8708 3.62473 37.1983 3.62473 38.5579H3.62272Z" fill="white"></path>';
-  echo '            <path d="M19.0316 20.3671C13.4079 20.357 8.8662 15.8335 8.84407 10.2218C8.82195 4.6 13.432 -0.00803493 19.0719 1.05193e-05C24.7037 0.00805597 29.3117 4.65028 29.2594 10.262C29.2071 15.8817 24.6554 20.3771 19.0316 20.3671ZM18.9793 17.1388C22.8452 17.169 25.9748 14.1178 26.0312 10.262C26.0855 6.45246 22.9457 3.25238 19.1241 3.22423C15.2744 3.19607 12.1367 6.2634 12.0743 10.1192C12.012 13.9327 15.1356 17.1087 18.9813 17.1388H18.9793Z" fill="white"></path>';
-  echo '            <path d="M42.1323 10.1775C42.1404 14.6568 39.1394 18.6876 34.8592 19.9447C33.7309 20.2766 32.8338 19.9145 32.5502 19.0134C32.2485 18.058 32.7292 17.2716 33.8435 16.8894C36.9571 15.8254 38.8598 13.3293 38.9001 10.2539C38.9423 7.17857 37.0194 4.59598 33.8696 3.49778C32.7312 3.10154 32.2585 2.35331 32.5401 1.39389C32.8056 0.48878 33.7148 0.100587 34.8351 0.41436C39.0489 1.59503 42.1243 5.70827 42.1323 10.1755V10.1775Z" fill="white"></path>';
-  echo '            <path d="M47.5468 38.6181C47.4443 37.0654 47.5187 35.6333 47.227 34.2816C46.5673 31.2324 43.9485 29.1486 40.8329 28.9757C39.5497 28.9053 38.8819 28.3159 38.9221 27.2881C38.9603 26.2684 39.6945 25.7193 40.9717 25.7535C45.9981 25.8882 50.3929 30.1322 50.6443 35.1485C50.7268 36.7858 50.6966 38.4291 50.6785 40.0703C50.6665 41.2229 50.0812 41.8162 48.9548 41.8363C47.6152 41.8605 46.2757 41.8584 44.9361 41.8363C43.9063 41.8182 43.2204 41.1806 43.1922 40.2775C43.1641 39.3281 43.862 38.6604 44.9401 38.6222C45.3424 38.6081 45.7447 38.6181 46.1449 38.6181C46.5392 38.6181 46.9354 38.6181 47.5489 38.6181H47.5468Z" fill="white"></path>';
-  echo '          </svg>';
-  echo '        </div>';
-  echo '        <div>';
-  echo '          <h3 class="text-xl font-semibold mb-1">Produtos seguros</h3>';
-  echo '          <p class="text-white/90 text-sm leading-relaxed">Itens testados em laboratório para garantir nossa qualidade.</p>';
-  echo '        </div>';
-  echo '      </div>';
-  echo '    </div>';
-  echo '  </div>';
-  echo '</section>';
+  // Sessão de destaque dinâmica (produtos marcados como "Destaque")
+  $featuredProducts = [];
+  $featuredIds = [];
+  if ($featuredEnabled && $q === '' && $category_id === 0) {
+    try {
+      $featuredStmt = $pdo->prepare("SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.active = 1 AND p.featured = 1 ORDER BY p.updated_at DESC, p.id DESC LIMIT 8");
+      $featuredStmt->execute();
+      $featuredProducts = $featuredStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+      $featuredProducts = [];
+    }
+    if ($featuredProducts) {
+      $featuredIds = array_map('intval', array_column($featuredProducts, 'id'));
+    } else {
+      $featuredEnabled = false;
+    }
+  }
 
-  echo '<section class="max-w-7xl mx-auto px-4 mb-12">';
-  echo '  <div class="grid gap-4 sm:grid-cols-2">';
-  echo '    <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-[#e8f0ff] via-[#f2f6ff] to-[#f8fafc] shadow-sm p-6 flex flex-col gap-2">';
-  echo '      <div class="w-12 h-12 rounded-xl bg-white/70 text-brand-600 grid place-items-center text-xl shadow-sm"><i class="fa-solid fa-shield-heart"></i></div>';
-  echo '      <h3 class="text-lg font-semibold text-gray-900">Produtos Originais</h3>';
-  echo '      <p class="text-sm text-gray-600 leading-relaxed">Nossos produtos são 100% originais e testados em laboratório.</p>';
-  echo '    </div>';
-  echo '    <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-[#e8f0ff] via-[#f2f6ff] to-[#f8fafc] shadow-sm p-6 flex flex-col gap-2">';
-  echo '      <div class="w-12 h-12 rounded-xl bg-white/70 text-brand-600 grid place-items-center text-xl shadow-sm"><i class="fa-solid fa-medal"></i></div>';
-  echo '      <h3 class="text-lg font-semibold text-gray-900">Qualidade e Segurança</h3>';
-  echo '      <p class="text-sm text-gray-600 leading-relaxed">Compre com quem se preocupa com a qualidade dos produtos.</p>';
-  echo '    </div>';
-  echo '  </div>';
-  echo '</section>';
+  if ($featuredEnabled && $featuredProducts) {
+    echo '<section class="relative overflow-hidden py-12">';
+    echo '  <div class="absolute inset-0 bg-gradient-to-r from-[#0f3d91] via-[#1f54c1] to-[#3a7bff] opacity-95"></div>';
+    echo '  <div class="relative max-w-7xl mx-auto px-4 text-white space-y-6">';
+    echo '    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">';
+    echo '      <div>';
+    echo '        <span class="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-white/70 mb-2"><i class="fa-solid fa-bolt"></i> Oferta destaque</span>';
+    echo '        <h2 class="text-3xl md:text-4xl font-bold">'.$featuredTitleHtml.'</h2>';
+    echo '        <p class="text-white/80 text-base md:text-lg max-w-2xl">'.$featuredSubtitleHtml.'</p>';
+    echo '      </div>';
+    echo '      <div class="flex items-center gap-2 text-sm text-white/80"><i class="fa-solid fa-star"></i><span>Habilite ou altere os produtos em Destaque no painel.</span></div>';
+    echo '    </div>';
+    echo '    <div class="flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory" style="-webkit-overflow-scrolling: touch;">';
+    foreach ($featuredProducts as $fp) {
+      $img = $fp['image_path'] ?: 'assets/no-image.png';
+      $img = proxy_img($img);
+      $nameHtml = htmlspecialchars($fp['name'], ENT_QUOTES, 'UTF-8');
+      $descHtml = htmlspecialchars($fp['description'] ?? '', ENT_QUOTES, 'UTF-8');
+      $categoryHtml = $fp['category_name'] ? htmlspecialchars($fp['category_name'], ENT_QUOTES, 'UTF-8') : 'Sem categoria';
+      $priceValue = (float)($fp['price'] ?? 0);
+      $priceFormatted = '$ '.number_format($priceValue, 2, ',', '.');
+      $compareValue = isset($fp['price_compare']) ? (float)$fp['price_compare'] : null;
+      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? '$ '.number_format($compareValue, 2, ',', '.') : '';
+      $savingBadge = '';
+      if ($compareValue && $compareValue > $priceValue && $compareValue > 0) {
+        $savingPercent = max(1, min(90, (int)round((($compareValue - $priceValue) / $compareValue) * 100)));
+        $savingBadge = '<span class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-yellow-100"><i class="fa-solid fa-arrow-down-long"></i> Economize '.$savingPercent.'%</span>';
+      }
+      $inStock = ((int)($fp['stock'] ?? 0) > 0);
+      $buttonHtml = $inStock
+        ? '<button class="w-full px-4 py-3 rounded-xl bg-white text-brand-700 font-semibold shadow hover:bg-brand-50 transition" onclick="addToCart('.(int)$fp['id'].', \''.$nameHtml.'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Comprar agora</button>'
+        : '<button class="w-full px-4 py-3 rounded-xl bg-white/30 text-white/70 font-semibold cursor-not-allowed"><i class="fa-solid fa-circle-exclamation mr-2"></i>Indisponível</button>' ;
+      echo '      <div class="min-w-[260px] md:min-w-[280px] bg-white/10 border border-white/15 rounded-2xl p-5 backdrop-blur-lg snap-start hover:border-white/40 transition-shadow shadow-lg">';
+      echo '        <div class="flex items-center justify-between mb-3">';
+      echo '          <span class="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide bg-white/20 text-white flex items-center gap-1"><i class="fa-solid fa-fire text-yellow-200"></i> Destaque</span>';
+      echo '          <span class="text-xs text-white/70">'.$categoryHtml.'</span>';
+      echo '        </div>';
+      echo '        <div class="relative mb-4">';
+      echo '          <img src="'.htmlspecialchars($img, ENT_QUOTES, 'UTF-8').'" alt="'.$nameHtml.'" class="w-full h-40 object-cover rounded-xl shadow-inner">';
+      echo '        </div>';
+      echo '        <h3 class="text-lg font-semibold">'.$nameHtml.'</h3>';
+      echo '        <p class="text-sm text-white/75 leading-relaxed line-clamp-3 mb-4">'.$descHtml.'</p>';
+      echo '        <div class="flex items-baseline gap-2 mb-3">';
+      if ($compareFormatted) {
+        echo '          <span class="text-sm line-through text-white/70">De '.$compareFormatted.'</span>';
+      }
+      echo '          <span class="text-2xl font-bold">Por '.$priceFormatted.'</span>';
+      echo '        </div>';
+      if ($savingBadge) {
+        echo '        <div class="mb-4">'.$savingBadge.'</div>';
+      }
+      echo '        '.$buttonHtml;
+      echo '      </div>';
+    }
+    echo '    </div>';
+    echo '  </div>';
+    echo '</section>';
+  }
 
-  // Busca produtos
+// Busca produtos
   $where = ["p.active=1"];
   $params = [];
   if ($q !== '') {
@@ -893,6 +915,11 @@ if ($route === 'home') {
   }
   if ($category_id > 0) {
     $where[] = "p.category_id = ?"; $params[] = $category_id;
+  }
+  if ($featuredIds) {
+    $placeholders = implode(',', array_fill(0, count($featuredIds), '?'));
+    $where[] = "p.id NOT IN ($placeholders)";
+    $params = array_merge($params, $featuredIds);
   }
   $whereSql = 'WHERE '.implode(' AND ', $where);
 
@@ -924,6 +951,10 @@ if ($route === 'home') {
       $img = $p['image_path'] ?: 'assets/no-image.png';
       $img = proxy_img($img); // passa pelo proxy se for URL absoluta
       $in_stock = ((int)$p['stock'] > 0);
+      $priceValue = (float)($p['price'] ?? 0);
+      $priceFormatted = '$ '.number_format($priceValue, 2, ',', '.');
+      $compareValue = isset($p['price_compare']) ? (float)$p['price_compare'] : null;
+      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? '$ '.number_format($compareValue, 2, ',', '.') : '';
       echo '<div class="product-card card rounded-2xl shadow hover:shadow-lg transition overflow-hidden">';
       echo '  <div class="relative h-48 overflow-hidden">';
         echo '    <img src="'.htmlspecialchars($img).'" class="w-full h-full object-cover transition-transform duration-300" alt="'.htmlspecialchars($p['name']).'">';
@@ -939,12 +970,19 @@ if ($route === 'home') {
       echo '    <div class="font-semibold">'.htmlspecialchars($p['name']).'</div>';
       echo '    <div class="text-sm text-gray-600 line-clamp-2">'.htmlspecialchars($p['description']).'</div>';
       echo '    <div class="flex items-center justify-between pt-2">';
-      echo '      <div class="text-2xl font-bold text-gray-900">$ '.number_format((float)$p['price'], 2, ',', '.').'</div>';
+      if ($compareFormatted) {
+        echo '      <div class="flex flex-col leading-tight">';
+        echo '        <span class="text-xs text-gray-400 line-through">De '.$compareFormatted.'</span>';
+        echo '        <span class="text-2xl font-bold text-gray-900">Por '.$priceFormatted.'</span>';
+        echo '      </div>';
+      } else {
+        echo '      <div class="text-2xl font-bold text-gray-900">'.$priceFormatted.'</div>';
+      }
       echo '      <div class="text-xs '.($in_stock?'text-green-600':'text-red-600').'">'.($in_stock?'Em estoque':'Indisponível').'</div>';
       echo '    </div>';
       echo '    <div class="pt-2">';
       if ($in_stock) {
-        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-600 text-white hover:bg-brand-700 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name']).'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Adicionar</button>';
+        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-600 text-white hover:bg-brand-700 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name'], ENT_QUOTES, 'UTF-8').'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Adicionar</button>';
       } else {
         echo '    <button class="w-full px-4 py-3 rounded-xl bg-gray-300 text-gray-600 cursor-not-allowed"><i class="fa-solid fa-ban mr-2"></i>Indisponível</button>';
       }
@@ -1302,7 +1340,7 @@ if ($route === 'checkout') {
     echo '  <div class="mb-4 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-3"><i class="fa-solid fa-triangle-exclamation mt-1"></i><span>'.htmlspecialchars($checkoutError, ENT_QUOTES, 'UTF-8').'</span></div>';
   }
   echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-lock mr-2 text-brand-600"></i>'.htmlspecialchars($d['checkout'] ?? 'Finalizar Compra').'</h2>';
-  echo '  <form method="post" action="?route=place_order" enctype="multipart/form-data" class="grid lg:grid-cols-2 gap-6">';
+  echo '  <form id="checkout-form" method="post" action="?route=place_order" enctype="multipart/form-data" class="grid lg:grid-cols-2 gap-6">';
   echo '    <input type="hidden" name="csrf" value="'.csrf_token().'">';
 
   // Coluna 1 — Dados
@@ -1438,23 +1476,47 @@ echo '      </div>';
   echo '</section>';
 
   echo "<script>
-    const paymentRadios = document.querySelectorAll(\"input[name='payment']\");
-    const infoBlocks = document.querySelectorAll('[data-payment-info]');
-    const receiptBlocks = document.querySelectorAll('[data-payment-receipt]');
-    paymentRadios.forEach(radio => {
-      radio.addEventListener('change', () => {
-        document.querySelectorAll('.border-brand-300').forEach(el => el.classList.remove('border-brand-300'));
-        const card = radio.closest('label');
-        if (card) card.classList.add('border-brand-300');
-        const code = radio.dataset.code;
-        infoBlocks.forEach(block => {
-          block.classList.toggle('hidden', block.getAttribute('data-payment-info') !== code);
-        });
-        receiptBlocks.forEach(block => {
-          block.classList.toggle('hidden', block.getAttribute('data-payment-receipt') !== code);
+    (function(){
+      const paymentRadios = document.querySelectorAll(\"input[name='payment']\");
+      const infoBlocks = document.querySelectorAll('[data-payment-info]');
+      const receiptBlocks = document.querySelectorAll('[data-payment-receipt]');
+      paymentRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+          document.querySelectorAll('.border-brand-300').forEach(el => el.classList.remove('border-brand-300'));
+          const card = radio.closest('label');
+          if (card) card.classList.add('border-brand-300');
+          const code = radio.dataset.code;
+          infoBlocks.forEach(block => {
+            block.classList.toggle('hidden', block.getAttribute('data-payment-info') !== code);
+          });
+          receiptBlocks.forEach(block => {
+            block.classList.toggle('hidden', block.getAttribute('data-payment-receipt') !== code);
+          });
         });
       });
-    });
+
+      const form = document.querySelector('#checkout-form');
+      if (form) {
+        form.addEventListener('submit', function() {
+          const selected = form.querySelector(\"input[name='payment']:checked\");
+          if (!selected) { return; }
+          const code = selected.dataset.code || selected.value;
+          if (code === 'square') {
+            const features = 'noopener=yes,noreferrer=yes,width=920,height=860,left=120,top=60,resizable=yes,scrollbars=yes';
+            try { window.sessionStorage.setItem('square_checkout_pending', '1'); } catch (e) {}
+            const popup = window.open('', 'squareCheckout', features);
+            if (popup) {
+              popup.document.open();
+              popup.document.write('<!DOCTYPE html><html><head><title>Pagamento Square</title><meta charset=\"utf-8\"></head><body style=\"margin:0;font-family:-apple-system,BlinkMacSystemFont,\\\"Segoe UI\\\",Roboto,\\\"Helvetica Neue\\\",sans-serif;background:#0f3d91;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;text-align:center;\"><div style=\"font-size:18px;font-weight:600;\">Carregando checkout Square...</div><p style=\"margin-top:12px;font-size:13px;max-width:260px;opacity:.85;\">Não feche esta janela. Vamos abrir o link seguro do Square automaticamente.</p><div class=\"spinner\" style=\"margin-top:20px;border:4px solid rgba(255,255,255,0.2);border-top:4px solid #fff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;\"></div><style>@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}</style></body></html>');
+              popup.document.close();
+              try { popup.focus(); } catch (e) {}
+            }
+          } else {
+            try { window.sessionStorage.removeItem('square_checkout_pending'); } catch (e) {}
+          }
+        });
+      }
+    })();
   </script>";
 
   app_footer();
@@ -1520,6 +1582,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $selectedMethod = $methodMap[$payment_method];
   $methodSettings = $selectedMethod['settings'] ?? [];
   $methodType = $methodSettings['type'] ?? $selectedMethod['code'];
+  $storeNameForEmails = setting_get('store_name', $cfg['store']['name'] ?? 'Sua Loja');
 
   $squareRedirectUrl = null;
   $squareWarning = null;
@@ -1580,7 +1643,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   switch ($methodType) {
     case 'pix':
       $pixKey = $methodSettings['pix_key'] ?? ($methodSettings['account_value'] ?? '');
-      $merchantName = $methodSettings['merchant_name'] ?? 'Farma Fácil';
+      $merchantName = $methodSettings['merchant_name'] ?? $storeNameForEmails;
       $merchantCity = $methodSettings['merchant_city'] ?? 'MACEIO';
       if ($pixKey) {
         $payRef = pix_payload($pixKey, $merchantName, $merchantCity, $total);
@@ -1602,7 +1665,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                   rawurlencode($business).
                   '&currency_code='.rawurlencode($currency).
                   '&amount='.number_format($total, 2, '.', '').
-                  '&item_name=Pedido%20Farma%20Facil&return='.
+                  '&item_name='.rawurlencode('Pedido '.$storeNameForEmails).'&return='.
                   rawurlencode($returnUrl).
                   '&cancel_return='.
                   rawurlencode($cancelUrl);
@@ -1782,15 +1845,28 @@ if ($route === 'order_success') {
     echo '    </div>';
     echo '    <script>
       window.addEventListener("load", function(){
-        const key = "square_redirect_'.$order_id.'";
-        if (!window.sessionStorage.getItem(key)) {
-          window.sessionStorage.setItem(key, "1");
+        const redirectKey = "square_redirect_'.$order_id.'";
+        if (!window.sessionStorage.getItem(redirectKey)) {
+          window.sessionStorage.setItem(redirectKey, "1");
+          const popFeatures = "noopener=yes,noreferrer=yes,width=920,height=860,left=120,top=60,resizable=yes,scrollbars=yes";
           if ('.($squareOpenNewTabSession ? 'true' : 'false').') {
-            window.open('.$squareJs.', "_blank");
+            let popup = null;
+            try {
+              popup = window.open("", "squareCheckout", popFeatures);
+            } catch (err) {
+              popup = null;
+            }
+            if (popup) {
+              popup.location = '.$squareJs.';
+              try { popup.focus(); } catch (err) {}
+            } else {
+              window.location.href = '.$squareJs.';
+            }
           } else {
             window.location.href = '.$squareJs.';
           }
         }
+        try { window.sessionStorage.removeItem("square_checkout_pending"); } catch (err) {}
       });
     </script>';
   }

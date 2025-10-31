@@ -171,6 +171,12 @@ function product_form($row){
   $name = sanitize_html($row['name'] ?? '');
   $sku = sanitize_html($row['sku'] ?? '');
   $price = number_format((float)($row['price'] ?? 0), 2, '.', '');
+  $priceCompareRaw = $row['price_compare'] ?? null;
+  if ($priceCompareRaw === null || $priceCompareRaw === '') {
+    $priceCompare = '';
+  } else {
+    $priceCompare = number_format((float)$priceCompareRaw, 2, '.', '');
+  }
   $shippingCost = number_format((float)($row['shipping_cost'] ?? 7.00), 2, '.', '');
   $stock = (int)($row['stock'] ?? 0);
   $category_id = (int)($row['category_id'] ?? 0);
@@ -187,7 +193,10 @@ function product_form($row){
   echo '  <div class="grid md:grid-cols-2 gap-3">';
   echo '    <div class="field"><span>Nome</span><input class="input" name="name" value="'.$name.'" required></div>';
   echo '    <div class="field"><span>SKU</span><input class="input" name="sku" value="'.$sku.'" required></div>';
-  echo '    <div class="field"><span>Preço</span><input class="input" name="price" type="number" step="0.01" value="'.$price.'" required></div>';
+  echo '    <div class="field"><span>Preço original (De)</span><input class="input" name="price_compare" type="number" step="0.01" value="'.$priceCompare.'" placeholder="Ex.: 59.90">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Deixe vazio para ocultar a faixa “de”.</p></div>';
+  echo '    <div class="field"><span>Preço atual (Por)</span><input class="input" name="price" type="number" step="0.01" value="'.$price.'" required>';
+  echo '      <p class="text-xs text-gray-500 mt-1">Valor final cobrado do cliente.</p></div>';
   echo '    <div class="field"><span>Frete (US$)</span><input class="input" name="shipping_cost" type="number" step="0.01" value="'.$shippingCost.'" placeholder="7.00"></div>';
   echo '    <div class="field"><span>Estoque</span><input class="input" name="stock" type="number" value="'.$stock.'" required></div>';
   echo '    <div class="field"><span>Categoria</span><select class="select" name="category_id">'.categories_options($GLOBALS["pdo"], $category_id).'</select></div>';
@@ -221,13 +230,14 @@ if ($action==='export') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename="produtos-'.date('Ymd-His').'.csv"');
   $out = fopen('php://output', 'w');
-  fputcsv($out, ['sku','name','price','shipping_cost','stock','category_id','description','image_path','square_payment_link','stripe_payment_link','active']);
-  $stmt = $pdo->query("SELECT sku,name,price,shipping_cost,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active FROM products ORDER BY id ASC");
+  fputcsv($out, ['sku','name','price','price_compare','shipping_cost','stock','category_id','description','image_path','square_payment_link','stripe_payment_link','active']);
+  $stmt = $pdo->query("SELECT sku,name,price,price_compare,shipping_cost,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active FROM products ORDER BY id ASC");
   foreach ($stmt as $row) {
     fputcsv($out, [
       $row['sku'],
       $row['name'],
       number_format((float)$row['price'], 2, '.', ''),
+      $row['price_compare'] !== null ? number_format((float)$row['price_compare'], 2, '.', '') : '',
       number_format((float)($row['shipping_cost'] ?? 7), 2, '.', ''),
       (int)$row['stock'],
       $row['category_id'],
@@ -269,6 +279,7 @@ if ($action==='import') {
     }
     $headerLower = array_map(fn($v) => strtolower(trim($v)), $header);
     $headerMap = array_flip($headerLower);
+    $hasPriceCompare = isset($headerMap['price_compare']);
     foreach (['sku','name','price','stock'] as $required) {
       if (!isset($headerMap[$required])) {
         fclose($handle);
@@ -282,8 +293,8 @@ if ($action==='import') {
     $errors = [];
     $line = 1;
     $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
-    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=?, stripe_payment_link=? WHERE id=?");
-    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, price_compare=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=?, stripe_payment_link=? WHERE id=?");
+    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,price_compare,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
     $categoryIds = [];
     try {
       $categoryIds = $pdo->query("SELECT id FROM categories")->fetchAll(PDO::FETCH_COLUMN);
@@ -319,6 +330,13 @@ if ($action==='import') {
           $errors[] = "Linha {$line}: Preço inválido para o SKU {$sku}.";
           $skipped++;
           continue;
+        }
+        $priceCompare = null;
+        if ($hasPriceCompare) {
+          $priceCompare = parse_decimal_value($data['price_compare'] ?? '', null);
+          if ($priceCompare !== null && $priceCompare < 0) {
+            $priceCompare = null;
+          }
         }
         $shippingCost = parse_decimal_value($data['shipping_cost'] ?? '', 7.0);
         if ($shippingCost === null) {
@@ -365,10 +383,12 @@ if ($action==='import') {
           }
           $squareToUse = $squareLink !== '' ? $squareLink : ($existing['square_payment_link'] ?? '');
           $stripeToUse = $stripeLink !== '' ? $stripeLink : ($existing['stripe_payment_link'] ?? '');
+          $compareToUse = $hasPriceCompare ? $priceCompare : ($existing['price_compare'] ?? null);
           $updateStmt->execute([
             $name,
             $sku,
             $price,
+            $compareToUse,
             $shippingCost,
             $stock,
             $categoryToUse,
@@ -386,6 +406,7 @@ if ($action==='import') {
             $name,
             $sku,
             $price,
+            $priceCompare,
             $shippingCost,
             $stock,
             $categoryId,
@@ -428,7 +449,7 @@ if ($action==='import') {
     $icon = $flash['type'] === 'error' ? 'fa-circle-exclamation' : ($flash['type'] === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check');
     echo '<div class="'.$class.'"><i class="fa-solid '.$icon.' mr-2"></i>'.sanitize_html($flash['message']).'</div>';
   }
-  echo '<p class="text-sm text-gray-600">Envie um arquivo CSV (UTF-8) com o cabeçalho <code>sku,name,price,stock,category_id,description,image_path,square_payment_link,active</code>. SKU existente é atualizado; demais são criados.</p>';
+  echo '<p class="text-sm text-gray-600">Envie um arquivo CSV (UTF-8) com o cabeçalho <code>sku,name,price,price_compare,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active</code>. SKU existente é atualizado; demais são criados.</p>';
   echo '<p class="text-sm text-gray-600">Use <a class="text-brand-600 underline" href="products.php?action=export">Exportar CSV</a> para gerar um modelo.</p>';
   echo '<form method="post" enctype="multipart/form-data" class="space-y-3">';
   echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
@@ -456,6 +477,11 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $name = sanitize_string($_POST['name'] ?? '');
   $sku  = sanitize_string($_POST['sku'] ?? '');
   $price= (float)($_POST['price'] ?? 0);
+  $price_compare_input = trim((string)($_POST['price_compare'] ?? ''));
+  $price_compare = ($price_compare_input === '') ? null : (float)$price_compare_input;
+  if ($price_compare !== null && $price_compare < 0) {
+    $price_compare = null;
+  }
   $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
   if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
@@ -476,6 +502,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
+      'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
       'stripe_payment_link'=>$stripe_input
     ]);
@@ -490,6 +517,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
+      'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
       'stripe_payment_link'=>$stripe_input
     ]);
@@ -507,6 +535,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
+      'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
       'stripe_payment_link'=>$stripe_input
     ]);
@@ -524,9 +553,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+  $st=$pdo->prepare("INSERT INTO products(name,sku,price,price_compare,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
   try {
-    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link]);
+    $st->execute([$name,$sku,$price,$price_compare,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     // Proteção extra caso outro processo crie o mesmo SKU no intervalo
@@ -579,6 +608,11 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   $name = sanitize_string($_POST['name'] ?? '');
   $sku  = sanitize_string($_POST['sku'] ?? '');
   $price= (float)($_POST['price'] ?? 0);
+  $price_compare_input = trim((string)($_POST['price_compare'] ?? ''));
+  $price_compare = ($price_compare_input === '') ? null : (float)$price_compare_input;
+  if ($price_compare !== null && $price_compare < 0) {
+    $price_compare = null;
+  }
   $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
   if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
@@ -600,6 +634,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     product_form([
       'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+      'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
       'stripe_payment_link'=>$stripe_input
     ]);
@@ -614,6 +649,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     product_form([
       'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+      'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
       'stripe_payment_link'=>$stripe_input
     ]);
@@ -631,9 +667,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=?,stripe_payment_link=? WHERE id=?");
+  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,price_compare=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=?,stripe_payment_link=? WHERE id=?");
   try {
-    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link,$id]);
+    $st->execute([$name,$sku,$price,$price_compare,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link,$id]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     if (!empty($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062) {
@@ -643,6 +679,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
       product_form([
         'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
         'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
+        'price_compare'=>$price_compare_input,
         'square_payment_link'=>$square_input,
         'stripe_payment_link'=>$stripe_input
       ]);
@@ -746,7 +783,15 @@ foreach($st as $r){
   echo '<td>'.sanitize_html($r['sku']).'</td>';
   echo '<td>'.sanitize_html($r['name']).'</td>';
   echo '<td>'.sanitize_html($r['category_name']).'</td>';
-  echo '<td>$ '.number_format((float)$r['price'],2,',','.').'</td>';
+  $priceNow = (float)$r['price'];
+  $priceCompareList = isset($r['price_compare']) ? (float)$r['price_compare'] : null;
+  if ($priceCompareList && $priceCompareList > $priceNow) {
+    $compareFormatted = '$ '.number_format($priceCompareList,2,',','.');
+    $priceFormatted = '$ '.number_format($priceNow,2,',','.');
+    echo '<td><div class="flex flex-col leading-tight"><span class="text-[11px] line-through text-gray-400">'.$compareFormatted.'</span><span class="font-semibold text-brand-700">'.$priceFormatted.'</span></div></td>';
+  } else {
+    echo '<td>$ '.number_format($priceNow,2,',','.').'</td>';
+  }
   echo '<td>$ '.number_format((float)($r['shipping_cost'] ?? 7),2,',','.').'</td>';
   echo '<td>'.(int)$r['stock'].'</td>';
   $squareCol = trim((string)($r['square_payment_link'] ?? ''));

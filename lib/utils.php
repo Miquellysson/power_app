@@ -772,14 +772,73 @@ if (!function_exists('send_email')) {
     }
 }
 
+if (!function_exists('email_template_defaults')) {
+    function email_template_defaults($storeName = null) {
+        $info = store_info();
+        $detectedName = $storeName ?: ($info['name'] ?? 'Sua Loja');
+
+        $customerSubject = "Seu pedido {{order_id}} foi recebido - {$detectedName}";
+        $customerBody = <<<HTML
+<p>Olá {{customer_name}},</p>
+<p>Recebemos seu pedido <strong>#{{order_id}}</strong> na {{store_name}}.</p>
+<p><strong>Resumo do pedido:</strong></p>
+{{order_items}}
+<p><strong>Subtotal:</strong> {{order_subtotal}}<br>
+<strong>Frete:</strong> {{order_shipping}}<br>
+<strong>Total:</strong> {{order_total}}</p>
+<p>Forma de pagamento: {{payment_method}}</p>
+<p>Status e atualização: {{track_link}}</p>
+<p>Qualquer dúvida, responda este e-mail ou fale com a gente em {{support_email}}.</p>
+<p>Equipe {{store_name}}</p>
+HTML;
+
+        $adminSubject = "Novo pedido #{{order_id}} - {$detectedName}";
+        $adminBody = <<<HTML
+<h2>Novo pedido recebido</h2>
+<p><strong>Loja:</strong> {{store_name}}</p>
+<p><strong>Pedido:</strong> #{{order_id}}</p>
+<p><strong>Cliente:</strong> {{customer_name}} &lt;{{customer_email}}&gt; — {{customer_phone}}</p>
+<p><strong>Total:</strong> {{order_total}} &nbsp;|&nbsp; <strong>Pagamento:</strong> {{payment_method}}</p>
+{{order_items}}
+<p><strong>Endereço:</strong><br>{{shipping_address}}</p>
+<p><strong>Observações:</strong> {{order_notes}}</p>
+<p>Acesse o painel: <a href="{{admin_order_url}}">{{admin_order_url}}</a></p>
+HTML;
+
+        return [
+            'customer_subject' => $customerSubject,
+            'customer_body' => $customerBody,
+            'admin_subject' => $adminSubject,
+            'admin_body' => $adminBody,
+        ];
+    }
+}
+
+if (!function_exists('email_render_template')) {
+    function email_render_template($template, array $vars) {
+        $replacements = [];
+        foreach ($vars as $key => $value) {
+            $replacements['{{' . $key . '}}'] = (string)$value;
+        }
+        return strtr((string)$template, $replacements);
+    }
+}
+
 if (!function_exists('send_order_confirmation')) {
     function send_order_confirmation($order_id, $customer_email) {
         try {
             $pdo = db();
             $stmt = $pdo->prepare("
-                SELECT o.*, c.name AS customer_name 
-                FROM orders o 
-                LEFT JOIN customers c ON c.id = o.customer_id 
+                SELECT o.*,
+                       c.name   AS customer_name,
+                       c.email  AS customer_email,
+                       c.phone  AS customer_phone,
+                       c.address AS customer_address,
+                       c.city    AS customer_city,
+                       c.state   AS customer_state,
+                       c.zipcode AS customer_zipcode
+                FROM orders o
+                LEFT JOIN customers c ON c.id = o.customer_id
                 WHERE o.id = ?
             ");
             $stmt->execute([(int)$order_id]);
@@ -790,29 +849,79 @@ if (!function_exists('send_order_confirmation')) {
             if (!is_array($items)) $items = [];
 
             $cfg     = cfg();
-            $store   = $cfg['store'] ?? [];
-            $sname   = $store['name'] ?? 'Farma Fácil';
+            $storeInfo = store_info();
+            $storeName = $storeInfo['name'] ?? 'Sua Loja';
+            $currency = $storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD');
 
-            $subject = "Pedido #{$order_id} - {$sname}";
+            $defaults = email_template_defaults($storeName);
+            $subjectTpl = setting_get('email_customer_subject', $defaults['customer_subject']);
+            $bodyTpl = setting_get('email_customer_body', $defaults['customer_body']);
 
-            $body  = "<h2>Pedido Confirmado!</h2>";
-            $body .= "<p>Olá " . sanitize_html($order['customer_name'] ?? '') . ",</p>";
-            $body .= "<p>Seu pedido #{$order_id} foi recebido e está sendo processado.</p>";
-            $body .= "<h3>Itens do Pedido:</h3><ul>";
-
+            $itemsHtml = '<ul style="padding-left:18px;margin:0;">';
             foreach ($items as $item) {
                 $nm = sanitize_html($item['name'] ?? '');
                 $qt = (int)($item['qty'] ?? 0);
                 $vl = (float)($item['price'] ?? 0);
-                $body .= "<li>{$nm} - Qtd: {$qt} - " . format_currency($vl * $qt, $store['currency'] ?? 'BRL') . "</li>";
+                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $currency).'</li>';
             }
-            $body .= "</ul>";
+            $itemsHtml .= '</ul>';
 
-            $body .= "<p><strong>Total: " . format_currency((float)$order['total'], $store['currency'] ?? 'BRL') . "</strong></p>";
-            $body .= "<p><strong>Forma de Pagamento:</strong> " . sanitize_html($order['payment_method'] ?? '-') . "</p>";
-            $body .= "<p>Acompanhe seu pedido por aqui: <a href='".htmlspecialchars((cfg()['store']['base_url'] ?? ''), ENT_QUOTES, 'UTF-8')."/index.php?route=track&code=".sanitize_html($order['track_token'] ?? '')."'>rastreamento do pedido</a></p>";
-            $body .= "<p>Em breve você receberá atualizações sobre o status do seu pedido.</p>";
-            $body .= "<p>Obrigado pela preferência!<br>Equipe " . sanitize_html($sname) . "</p>";
+            $subtotalVal = (float)($order['subtotal'] ?? 0);
+            $shippingVal = (float)($order['shipping_cost'] ?? 0);
+            $totalVal    = (float)($order['total'] ?? 0);
+
+            $baseUrl = rtrim($cfg['store']['base_url'] ?? '', '/');
+            $trackToken = trim((string)($order['track_token'] ?? ''));
+            $trackUrl = $trackToken ? ($baseUrl ? $baseUrl : '').'/index.php?route=track&code='.urlencode($trackToken) : '';
+            if ($trackUrl && strpos($trackUrl, 'http') !== 0) {
+                $trackUrl = '/' . ltrim($trackUrl, '/');
+            }
+            $trackLink = $trackUrl ? '<a href="'.sanitize_html($trackUrl).'">clique aqui</a>' : '';
+
+            $paymentLabel = $order['payment_method'] ?? '-';
+            try {
+                $pm = $pdo->prepare("SELECT name FROM payment_methods WHERE code = ? LIMIT 1");
+                $pm->execute([$order['payment_method'] ?? '']);
+                $pmName = $pm->fetchColumn();
+                if ($pmName) {
+                    $paymentLabel = $pmName;
+                }
+            } catch (Throwable $e) {}
+
+            $shippingParts = array_filter([
+                $order['customer_name'] ?? '',
+                $order['customer_address'] ?? '',
+                $order['customer_city'] ?? '',
+                $order['customer_state'] ?? '',
+                $order['customer_zipcode'] ?? ''
+            ], fn($v) => trim((string)$v) !== '');
+            $shippingHtml = $shippingParts ? implode('<br>', array_map('sanitize_html', $shippingParts)) : '—';
+
+            $vars = [
+                'store_name' => sanitize_html($storeName),
+                'customer_name' => sanitize_html($order['customer_name'] ?? ''),
+                'customer_email' => sanitize_html($order['customer_email'] ?? $customer_email),
+                'customer_phone' => sanitize_html($order['customer_phone'] ?? ''),
+                'order_id' => (string)$order_id,
+                'order_total' => format_currency($totalVal, $currency),
+                'order_subtotal' => format_currency($subtotalVal, $currency),
+                'order_shipping' => format_currency($shippingVal, $currency),
+                'order_items' => $itemsHtml,
+                'payment_method' => sanitize_html($paymentLabel),
+                'payment_reference' => sanitize_html($order['payment_ref'] ?? ''),
+                'order_notes' => sanitize_html($order['notes'] ?? '—'),
+                'track_link' => $trackLink ?: sanitize_html($trackUrl),
+                'track_url' => sanitize_html($trackUrl),
+                'support_email' => sanitize_html($storeInfo['email'] ?? ($cfg['store']['support_email'] ?? '')),
+                'shipping_address' => $shippingHtml,
+            ];
+
+            $subjectVars = $vars;
+            $subjectVars['order_items'] = '';
+            $subjectVars['track_link'] = $vars['track_url'];
+
+            $subject = email_render_template($subjectTpl, $subjectVars);
+            $body = email_render_template($bodyTpl, $vars);
 
             return send_email($customer_email, $subject, $body);
         } catch (Throwable $e) {
@@ -827,7 +936,14 @@ if (!function_exists('send_order_admin_alert')) {
         try {
             $pdo = db();
             $stmt = $pdo->prepare("
-                SELECT o.*, c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone
+                SELECT o.*,
+                       c.name    AS customer_name,
+                       c.email   AS customer_email,
+                       c.phone   AS customer_phone,
+                       c.address AS customer_address,
+                       c.city    AS customer_city,
+                       c.state   AS customer_state,
+                       c.zipcode AS customer_zipcode
                 FROM orders o
                 LEFT JOIN customers c ON c.id = o.customer_id
                 WHERE o.id = ?
@@ -840,26 +956,70 @@ if (!function_exists('send_order_admin_alert')) {
             if (!is_array($items)) { $items = []; }
 
             $cfg = cfg();
-            $store = $cfg['store'] ?? [];
-            $sname = $store['name'] ?? 'Farma Fácil';
-            $currency = $store['currency'] ?? 'USD';
+            $storeInfo = store_info();
+            $storeName = $storeInfo['name'] ?? ($cfg['store']['name'] ?? 'Sua Loja');
+            $currency = $storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD');
 
-            $subject = "Novo pedido #{$order_id} - {$sname}";
+            $defaults = email_template_defaults($storeName);
+            $subjectTpl = setting_get('email_admin_subject', $defaults['admin_subject']);
+            $bodyTpl = setting_get('email_admin_body', $defaults['admin_body']);
 
-            $body  = "<h2>Novo pedido recebido</h2>";
-            $body .= "<p><strong>Cliente:</strong> ".sanitize_html($order['customer_name'] ?? '-')."</p>";
-            $body .= "<p><strong>E-mail:</strong> ".sanitize_html($order['customer_email'] ?? '-')." | <strong>Telefone:</strong> ".sanitize_html($order['customer_phone'] ?? '-')."</p>";
-            $body .= "<p><strong>Pagamento:</strong> ".sanitize_html($order['payment_method'] ?? '-')."</p>";
-            $body .= "<p><strong>Total:</strong> ".format_currency((float)($order['total'] ?? 0), $currency)."</p>";
-            $body .= "<h3>Itens</h3><ul>";
+            $itemsHtml = '<ul style="padding-left:18px;margin:0;">';
             foreach ($items as $item) {
                 $nm = sanitize_html($item['name'] ?? '');
                 $qt = (int)($item['qty'] ?? 0);
                 $vl = (float)($item['price'] ?? 0);
-                $body .= "<li>{$nm} — Qtd: {$qt} — ".format_currency($vl * $qt, $currency)."</li>";
+                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $currency).'</li>';
             }
-            $body .= "</ul>";
-            $body .= "<p>Acesse o painel para atualizar o status do pedido.</p>";
+            $itemsHtml .= '</ul>';
+
+            $subtotalVal = (float)($order['subtotal'] ?? 0);
+            $shippingVal = (float)($order['shipping_cost'] ?? 0);
+            $totalVal    = (float)($order['total'] ?? 0);
+
+            $baseUrl = rtrim($cfg['store']['base_url'] ?? '', '/');
+            $adminOrderUrl = $baseUrl ? $baseUrl.'/admin.php?route=orders&action=view&id='.$order_id : 'admin.php?route=orders&action=view&id='.$order_id;
+
+            $paymentLabel = $order['payment_method'] ?? '-';
+            try {
+                $pm = $pdo->prepare("SELECT name FROM payment_methods WHERE code = ? LIMIT 1");
+                $pm->execute([$order['payment_method'] ?? '']);
+                $pmName = $pm->fetchColumn();
+                if ($pmName) {
+                    $paymentLabel = $pmName;
+                }
+            } catch (Throwable $e) {}
+
+            $shippingParts = array_filter([
+                $order['customer_address'] ?? '',
+                $order['customer_city'] ?? '',
+                $order['customer_state'] ?? '',
+                $order['customer_zipcode'] ?? ''
+            ], fn($v) => trim((string)$v) !== '');
+            $shippingHtml = $shippingParts ? implode('<br>', array_map('sanitize_html', $shippingParts)) : '—';
+
+            $vars = [
+                'store_name' => sanitize_html($storeName),
+                'order_id' => (string)$order_id,
+                'customer_name' => sanitize_html($order['customer_name'] ?? ''),
+                'customer_email' => sanitize_html($order['customer_email'] ?? ''),
+                'customer_phone' => sanitize_html($order['customer_phone'] ?? ''),
+                'order_total' => format_currency($totalVal, $currency),
+                'order_subtotal' => format_currency($subtotalVal, $currency),
+                'order_shipping' => format_currency($shippingVal, $currency),
+                'payment_method' => sanitize_html($paymentLabel),
+                'payment_reference' => sanitize_html($order['payment_ref'] ?? ''),
+                'order_items' => $itemsHtml,
+                'order_notes' => sanitize_html($order['notes'] ?? '—'),
+                'shipping_address' => $shippingHtml,
+                'admin_order_url' => sanitize_html($adminOrderUrl),
+            ];
+
+            $subjectVars = $vars;
+            $subjectVars['order_items'] = '';
+
+            $subject = email_render_template($subjectTpl, $subjectVars);
+            $body = email_render_template($bodyTpl, $vars);
 
             $recipients = [];
             if ($extraEmails) {

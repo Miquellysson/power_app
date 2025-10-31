@@ -335,6 +335,44 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   setting_set('home_hero_title', $heroTitle);
   setting_set('home_hero_subtitle', $heroSubtitle);
 
+  $featuredEnabled = isset($_POST['home_featured_enabled']) ? '1' : '0';
+  $featuredTitle = pm_sanitize($_POST['home_featured_title'] ?? '', 80);
+  $featuredSubtitle = pm_sanitize($_POST['home_featured_subtitle'] ?? '', 200);
+  if ($featuredTitle === '') {
+    $featuredTitle = 'Ofertas em destaque';
+  }
+  if ($featuredSubtitle === '') {
+    $featuredSubtitle = 'Seleção especial com preços imperdíveis.';
+  }
+  setting_set('home_featured_enabled', $featuredEnabled);
+  setting_set('home_featured_title', $featuredTitle);
+  setting_set('home_featured_subtitle', $featuredSubtitle);
+
+  $emailDefaultSet = email_template_defaults($storeName ?: (cfg()['store']['name'] ?? 'Sua Loja'));
+  $emailCustomerSubject = pm_sanitize($_POST['email_customer_subject'] ?? '', 180);
+  if ($emailCustomerSubject === '') {
+    $emailCustomerSubject = $emailDefaultSet['customer_subject'];
+  }
+  setting_set('email_customer_subject', $emailCustomerSubject);
+
+  $emailCustomerBody = pm_sanitize($_POST['email_customer_body'] ?? '', 8000);
+  if ($emailCustomerBody === '') {
+    $emailCustomerBody = $emailDefaultSet['customer_body'];
+  }
+  setting_set('email_customer_body', $emailCustomerBody);
+
+  $emailAdminSubject = pm_sanitize($_POST['email_admin_subject'] ?? '', 180);
+  if ($emailAdminSubject === '') {
+    $emailAdminSubject = $emailDefaultSet['admin_subject'];
+  }
+  setting_set('email_admin_subject', $emailAdminSubject);
+
+  $emailAdminBody = pm_sanitize($_POST['email_admin_body'] ?? '', 8000);
+  if ($emailAdminBody === '') {
+    $emailAdminBody = $emailDefaultSet['admin_body'];
+  }
+  setting_set('email_admin_body', $emailAdminBody);
+
   $whatsEnabled = isset($_POST['whatsapp_enabled']) ? '1' : '0';
   $whatsNumberRaw = pm_sanitize($_POST['whatsapp_number'] ?? '', 40);
   $whatsNumber = preg_replace('/\D+/', '', $whatsNumberRaw);
@@ -503,6 +541,14 @@ admin_header('Configurações');
     <?php
       $heroTitleCurrent = setting_get('home_hero_title', 'Tudo para sua saúde');
       $heroSubtitleCurrent = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
+$featuredEnabledCurrent = (int)setting_get('home_featured_enabled', '0');
+$featuredTitleCurrent = setting_get('home_featured_title', 'Ofertas em destaque');
+$featuredSubtitleCurrent = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
+$emailDefaults = email_template_defaults($storeNameCurrent ?: ($storeCfg['name'] ?? ''));
+$emailCustomerSubjectCurrent = setting_get('email_customer_subject', $emailDefaults['customer_subject']);
+$emailCustomerBodyCurrent = setting_get('email_customer_body', $emailDefaults['customer_body']);
+$emailAdminSubjectCurrent = setting_get('email_admin_subject', $emailDefaults['admin_subject']);
+$emailAdminBodyCurrent = setting_get('email_admin_body', $emailDefaults['admin_body']);
 $whatsappEnabled = (int)setting_get('whatsapp_enabled', '0');
 $whatsappNumber = setting_get('whatsapp_number', '');
 $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
@@ -588,6 +634,55 @@ $pwaIconPreview = pwa_icon_url(192);
         <div>
           <label class="block text-sm font-medium mb-1">Descrição do rodapé</label>
           <textarea class="textarea w-full" name="footer_description" rows="2" maxlength="160"><?= sanitize_html($footerDescriptionCurrent); ?></textarea>
+        </div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <h3 class="text-md font-semibold">Vitrine de destaques</h3>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Exibir seção na home</label>
+          <select class="select" name="home_featured_enabled">
+            <option value="0" <?= !$featuredEnabledCurrent ? 'selected' : ''; ?>>Ocultar</option>
+            <option value="1" <?= $featuredEnabledCurrent ? 'selected' : ''; ?>>Mostrar</option>
+          </select>
+          <p class="hint mt-1">Quando ativa, aparece antes da lista principal com os produtos marcados como “Destaque”.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Título da seção</label>
+          <input class="input w-full" name="home_featured_title" maxlength="80" value="<?= sanitize_html($featuredTitleCurrent); ?>" placeholder="Ofertas em destaque">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Descrição de apoio</label>
+          <textarea class="textarea w-full" name="home_featured_subtitle" rows="2" maxlength="200"><?= sanitize_html($featuredSubtitleCurrent); ?></textarea>
+          <p class="hint mt-1">Ex.: “Seleção especial com preços imperdíveis — de X por Y”.</p>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 border border-gray-200 rounded-xl p-4 bg-white space-y-4">
+        <div class="flex flex-col gap-1">
+          <h3 class="text-md font-semibold flex items-center gap-2"><i class="fa-solid fa-envelope text-brand-600"></i> Templates de e-mail</h3>
+          <p class="text-xs text-gray-500">Personalize os e-mails enviados para o cliente e para a equipe. Placeholders disponíveis: <code>{{store_name}}</code>, <code>{{order_id}}</code>, <code>{{customer_name}}</code>, <code>{{customer_email}}</code>, <code>{{customer_phone}}</code>, <code>{{order_total}}</code>, <code>{{order_subtotal}}</code>, <code>{{order_shipping}}</code>, <code>{{payment_method}}</code>, <code>{{order_items}}</code>, <code>{{track_link}}</code>, <code>{{track_url}}</code>, <code>{{support_email}}</code>, <code>{{shipping_address}}</code>, <code>{{order_notes}}</code>, <code>{{admin_order_url}}</code>.</p>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Assunto (cliente)</label>
+            <input class="input w-full" name="email_customer_subject" maxlength="180" value="<?= htmlspecialchars($emailCustomerSubjectCurrent, ENT_QUOTES, 'UTF-8'); ?>">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Conteúdo (cliente)</label>
+            <textarea class="textarea w-full font-mono text-sm h-44" name="email_customer_body"><?= htmlspecialchars($emailCustomerBodyCurrent, ENT_QUOTES, 'UTF-8'); ?></textarea>
+            <p class="hint mt-1">Você pode usar HTML básico. Ex.: &lt;p&gt;, &lt;strong&gt;, &lt;ul&gt;.</p>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Assunto (admin)</label>
+            <input class="input w-full" name="email_admin_subject" maxlength="180" value="<?= htmlspecialchars($emailAdminSubjectCurrent, ENT_QUOTES, 'UTF-8'); ?>">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Conteúdo (admin)</label>
+            <textarea class="textarea w-full font-mono text-sm h-44" name="email_admin_body"><?= htmlspecialchars($emailAdminBodyCurrent, ENT_QUOTES, 'UTF-8'); ?></textarea>
+          </div>
         </div>
       </div>
 
