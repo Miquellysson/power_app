@@ -254,6 +254,39 @@ if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD']
   exit;
 }
 
+if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+  if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  $heroTitle = pm_sanitize($_POST['home_hero_title'] ?? '', 160);
+  $heroSubtitle = pm_sanitize($_POST['home_hero_subtitle'] ?? '', 240);
+  if ($heroTitle === '') {
+    $heroTitle = 'Tudo para sua saúde';
+  }
+  if ($heroSubtitle === '') {
+    $heroSubtitle = 'Experiência de app, rápida e segura.';
+  }
+  setting_set('home_hero_title', $heroTitle);
+  setting_set('home_hero_subtitle', $heroSubtitle);
+
+  $whatsEnabled = isset($_POST['whatsapp_enabled']) ? '1' : '0';
+  $whatsNumberRaw = pm_sanitize($_POST['whatsapp_number'] ?? '', 40);
+  $whatsNumber = preg_replace('/\D+/', '', $whatsNumberRaw);
+  $whatsButtonText = pm_sanitize($_POST['whatsapp_button_text'] ?? '', 80);
+  $whatsMessage = pm_sanitize($_POST['whatsapp_message'] ?? '', 400);
+  if ($whatsButtonText === '') {
+    $whatsButtonText = 'Fale com a gente';
+  }
+  if ($whatsMessage === '') {
+    $whatsMessage = 'Olá! Gostaria de tirar uma dúvida sobre os produtos.';
+  }
+  setting_set('whatsapp_enabled', $whatsEnabled);
+  setting_set('whatsapp_number', $whatsNumber);
+  setting_set('whatsapp_button_text', $whatsButtonText);
+  setting_set('whatsapp_message', $whatsMessage);
+
+  header('Location: settings.php?tab=general&saved=1');
+  exit;
+}
+
 try {
   $methods = $pdo->query('SELECT * FROM payment_methods ORDER BY sort_order ASC, id ASC')->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
@@ -288,7 +321,7 @@ $layoutData = [
 ];
 $layoutJson = json_encode($layoutData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
-$cards = [
+$sections = [
   [
     'key' => 'general',
     'title' => 'Dados da loja',
@@ -312,37 +345,51 @@ $cards = [
 admin_header('Configurações');
 ?>
 <section class="space-y-6">
-  <div class="card p-6">
-    <div class="flex items-center justify-between flex-wrap gap-3">
+  <div class="dashboard-hero">
+    <div class="flex flex-col gap-3">
       <div>
-        <h1 class="text-2xl font-bold mb-1">Configurações da Plataforma</h1>
-        <p class="text-sm text-gray-500">Personalize as informações da loja, pagamentos e aparência da vitrine.</p>
+        <h1 class="text-2xl md:text-3xl font-bold">Configurações da plataforma</h1>
+        <p class="text-white/90 text-sm md:text-base mt-1">Ajuste rapidamente informações da loja, pagamentos e layout da home.</p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <a href="index.php" target="_blank" class="btn btn-ghost"><i class="fa-solid fa-up-right-from-square"></i><span>Ver loja</span></a>
-        <a href="settings.php?tab=payments" class="btn btn-ghost"><i class="fa-solid fa-credit-card"></i><span>Pagamentos</span></a>
-        <a href="settings.php?tab=builder" class="btn btn-ghost"><i class="fa-solid fa-paintbrush"></i><span>Editor da Home</span></a>
+      <div class="quick-links">
+        <a class="quick-link" href="settings.php?tab=general">
+          <span class="icon"><i class="fa-solid fa-store"></i></span>
+          <span><div class="font-semibold">Dados gerais</div><div class="text-xs opacity-80">Logo, contatos e textos da vitrine</div></span>
+        </a>
+        <a class="quick-link" href="settings.php?tab=payments">
+          <span class="icon"><i class="fa-solid fa-credit-card"></i></span>
+          <span><div class="font-semibold">Pagamentos</div><div class="text-xs opacity-80">Formas de pagamento e instruções</div></span>
+        </a>
+        <a class="quick-link" href="settings.php?tab=builder">
+          <span class="icon"><i class="fa-solid fa-paintbrush"></i></span>
+          <span><div class="font-semibold">Editor da home</div><div class="text-xs opacity-80">Monte a página inicial em tempo real</div></span>
+        </a>
+        <a class="quick-link" href="dashboard.php">
+          <span class="icon"><i class="fa-solid fa-gauge-high"></i></span>
+          <span><div class="font-semibold">Voltar ao dashboard</div><div class="text-xs opacity-80">Resumo da operação e pedidos</div></span>
+        </a>
       </div>
     </div>
   </div>
 
-  <div class="grid gap-4 md:grid-cols-3">
-    <?php foreach ($cards as $card): $active = ($tab === $card['key']); ?>
-      <a href="settings.php?tab=<?= $card['key']; ?>" class="card p-4 flex items-start gap-3 border <?= $active ? 'border-brand-500 shadow-lg' : 'border-transparent'; ?>">
-        <div class="text-brand-700 text-xl"><i class="fa-solid <?= $card['icon']; ?>"></i></div>
-        <div>
-          <h2 class="text-lg font-semibold mb-1"><?= sanitize_html($card['title']); ?></h2>
-          <p class="text-sm text-gray-500"><?= sanitize_html($card['description']); ?></p>
-          <?php if ($active): ?>
-            <span class="text-xs font-semibold text-brand-600">ABERTO</span>
-          <?php endif; ?>
-        </div>
+  <div class="tab-controls">
+    <?php foreach ($sections as $section): ?>
+      <a href="settings.php?tab=<?= $section['key']; ?>" class="<?= $tab === $section['key'] ? 'active' : ''; ?>">
+        <i class="fa-solid <?= $section['icon']; ?> mr-2"></i><?= sanitize_html($section['title']); ?>
       </a>
     <?php endforeach; ?>
   </div>
 
-  <div data-tab-panel="general" class="card p-6 <?= $tab === 'general' ? '' : 'hidden'; ?>">
-    <h2 class="text-lg font-semibold mb-3">Informações da Loja</h2>
+  <div class="settings-grid">
+  <div data-tab-panel="general" class="card <?= $tab === 'general' ? '' : 'hidden'; ?>">
+    <div class="card-body settings-form">
+    <h2 class="text-lg font-semibold mb-1">Informações da Loja</h2>
+    <?php if (isset($_GET['saved'])): ?>
+      <div class="alert alert-success">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>Textos da página inicial atualizados com sucesso.</span>
+      </div>
+    <?php endif; ?>
     <form class="grid md:grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium mb-1">Nome da loja</label>
@@ -363,16 +410,71 @@ admin_header('Configurações');
       <div class="md:col-span-2">
         <label class="block text-sm font-medium mb-1">Logo atual</label>
         <?php $logo = get_logo_path(); if ($logo): ?>
-          <img src="<?= sanitize_html($logo); ?>" alt="Logo" class="h-16">
+          <img src="<?= sanitize_html($logo); ?>" alt="Logo" class="h-24 object-contain">
         <?php else: ?>
           <p class="text-sm text-gray-500">Sem logo configurada.</p>
         <?php endif; ?>
       </div>
       <p class="text-sm text-gray-500 md:col-span-2">Os dados acima são apenas leitura nesta tela. Atualize-os via painel de administração original ou implemente aqui conforme necessidade.</p>
     </form>
+
+    <hr class="my-6">
+
+    <?php
+      $heroTitleCurrent = setting_get('home_hero_title', 'Tudo para sua saúde');
+      $heroSubtitleCurrent = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
+      $whatsappEnabled = (int)setting_get('whatsapp_enabled', '0');
+      $whatsappNumber = setting_get('whatsapp_number', '');
+      $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
+      $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
+    ?>
+    <h3 class="text-md font-semibold mb-3">Texto do destaque na Home</h3>
+    <form class="grid md:grid-cols-2 gap-4" method="post" action="settings.php?tab=general&action=save_general">
+      <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium mb-1">Título principal</label>
+        <input class="input w-full" name="home_hero_title" maxlength="160" value="<?= sanitize_html($heroTitleCurrent); ?>" required>
+        <p class="text-xs text-gray-500 mt-1">Texto destacado exibido em negrito (ex.: "Tudo para sua saúde").</p>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm font-medium mb-1">Subtítulo</label>
+        <textarea class="textarea w-full" name="home_hero_subtitle" rows="2" maxlength="240" required><?= sanitize_html($heroSubtitleCurrent); ?></textarea>
+        <p class="text-xs text-gray-500 mt-1">Linha de apoio exibida logo abaixo do título.</p>
+      </div>
+
+      <div class="md:col-span-2 border border-gray-200 rounded-xl p-4 bg-white">
+        <h3 class="text-md font-semibold mb-2 flex items-center gap-2"><i class="fa-brands fa-whatsapp text-[#25D366]"></i> WhatsApp Flutuante</h3>
+        <p class="text-xs text-gray-500 mb-3">Defina o número e a mensagem exibida no botão flutuante da loja. O link abre a conversa direto no WhatsApp.</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <label class="inline-flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="whatsapp_enabled" value="1" <?= $whatsappEnabled ? 'checked' : ''; ?>>
+            Exibir botão flutuante
+          </label>
+          <div>
+            <label class="block text-sm font-medium mb-1">Número com DDI e DDD</label>
+            <input class="input w-full" name="whatsapp_number" value="<?= sanitize_html($whatsappNumber); ?>" placeholder="ex.: 1789101122" maxlength="30">
+            <p class="hint mt-1">Informe apenas números (ex.: 1789101122 para +1 789 101 122).</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Texto do botão</label>
+            <input class="input w-full" name="whatsapp_button_text" value="<?= sanitize_html($whatsappButtonText); ?>" maxlength="80" placeholder="Fale com nossa equipe">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Mensagem inicial enviada no WhatsApp</label>
+            <textarea class="textarea w-full" name="whatsapp_message" rows="3" maxlength="400"><?= sanitize_html($whatsappMessage); ?></textarea>
+            <p class="hint mt-1">Será preenchida automaticamente quando o cliente abrir a conversa.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 flex justify-end">
+        <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar textos</button>
+      </div>
+    </form>
+    </div>
   </div>
 
-  <div data-tab-panel="payments" class="<?= $tab === 'payments' ? '' : 'hidden'; ?> space-y-4">
+  <div data-tab-panel="payments" class="space-y-4 <?= $tab === 'payments' ? '' : 'hidden'; ?>">
     <div class="card p-6">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -392,7 +494,7 @@ admin_header('Configurações');
                 <?php if (!empty($pm['icon_path'])): ?>
                   <img src="<?= sanitize_html($pm['icon_path']); ?>" class="h-8 w-8 rounded" alt="icon">
                 <?php else: ?>
-                  <div class="h-8 w-8 rounded bg-brand-100 text-brand-700 flex items-center justify-center">
+                  <div class="h-8 w-8 rounded flex items-center justify-center" style="background:rgba(32,96,200,.08);color:var(--brand-700);">
                     <i class="fa-solid fa-credit-card"></i>
                   </div>
                 <?php endif; ?>
@@ -403,7 +505,7 @@ admin_header('Configurações');
               </div>
               <div class="flex items-center gap-2">
                 <?= ((int)$pm['is_active'] === 1) ? '<span class="badge ok">Ativo</span>' : '<span class="badge danger">Inativo</span>'; ?>
-                <?= !empty($pm['require_receipt']) ? '<span class="badge warning">Comprovante</span>' : ''; ?>
+                <?= !empty($pm['require_receipt']) ? '<span class="badge warn">Comprovante</span>' : ''; ?>
               </div>
               <div class="flex items-center gap-2">
                 <a class="btn btn-ghost" href="settings.php?tab=payments&action=edit&id=<?= (int)$pm['id']; ?>"><i class="fa-solid fa-pen"></i></a>
@@ -572,7 +674,7 @@ admin_header('Configurações');
     </div>
   </div>
 
-  <div data-tab-panel="builder" class="<?= $tab === 'builder' ? '' : 'hidden'; ?> card p-6">
+  <div data-tab-panel="builder" class="card p-6 <?= $tab === 'builder' ? '' : 'hidden'; ?>">
     <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
       <div>
         <h2 class="text-lg font-semibold">Editor visual da home</h2>
@@ -589,6 +691,7 @@ admin_header('Configurações');
       <div id="gjs" style="min-height:600px;background:#f5f5f5;"></div>
     </div>
   </div>
+</div>
 </section>
 
 <script>

@@ -49,34 +49,36 @@ function admin_header($title='Admin - FarmaFixed', $withLayout=true){
   echo '<!doctype html><html lang="pt-br"><head><meta charset="utf-8">';
   echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
   echo '<link rel="manifest" href="/manifest-admin.webmanifest">';
-  echo '<meta name="theme-color" content="#B91C1C">';
+  echo '<meta name="theme-color" content="#2060C8">';
   echo '<script src="https://cdn.tailwindcss.com"></script>';
   echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">';
   echo '<title>'.sanitize_html($title).'</title>';
   echo '<style>
-    :root{--bg:#ffffff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--brand:#DC2626;--brand-700:#B91C1C;--amber:#F59E0B}
-    html[data-theme=dark]{--bg:#0b0b0c;--fg:#E5E7EB;--muted:#A1A1AA;--line:#232428}
+    :root{--bg:#f4f7ff;--fg:#0f172a;--muted:#64748b;--line:#dbe4ff;--brand:#2060C8;--brand-700:#16469a;--accent:#4f88ff}
+    html[data-theme=dark]{--bg:#101522;--fg:#E5E7EB;--muted:#9ca3af;--line:#1f2a44}
     body{background:var(--bg);color:var(--fg)}
-    .topbar{background:rgba(255,255,255,.9);backdrop-filter:saturate(180%) blur(8px)}
-    html[data-theme=dark] .topbar{background:rgba(17,18,20,.8)}
+    .topbar{background:rgba(244,247,255,.9);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid rgba(32,96,200,.1)}
+    html[data-theme=dark] .topbar{background:rgba(16,21,34,.88)}
     .brand-chip{display:flex;align-items:center;gap:.6rem}
-    .brand-chip .logo{width:40px;height:40px;border-radius:.75rem;display:grid;place-items:center;background:linear-gradient(135deg,var(--brand),var(--brand-700));color:#fff}
+    .brand-chip .logo{width:42px;height:42px;border-radius:.9rem;display:grid;place-items:center;background:linear-gradient(135deg,var(--brand),var(--accent));color:#fff}
     .layout{display:grid;grid-template-columns:260px 1fr;gap:1rem}
     @media (max-width:1024px){.layout{grid-template-columns:1fr} .sidebar{position:sticky;top:64px}}
-    .card{background:#fff;border:1px solid var(--line);border-radius:.9rem}
-    html[data-theme=dark] .card{background:#111214}
-    .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;border-radius:.8rem}
-    .btn-primary{background:var(--brand);color:#fff;padding:.6rem 1rem}
-    .btn-ghost{border:1px solid var(--line);padding:.5rem .9rem}
+    .card{background:#fff;border:1px solid var(--line);border-radius:1rem;box-shadow:0 25px 50px -35px rgba(15,23,42,.35)}
+    html[data-theme=dark] .card{background:#131a2d}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;border-radius:.9rem;transition:all .2s}
+    .btn-primary{background:var(--brand);color:#fff;padding:.6rem 1rem;box-shadow:0 18px 30px -22px rgba(32,96,200,.9)}
+    .btn-primary:hover{background:var(--brand-700)}
+    .btn-ghost{border:1px solid rgba(32,96,200,.18);padding:.5rem .9rem;background:#fff;color:var(--brand-700)}
+    .btn-ghost:hover{background:rgba(32,96,200,.08)}
     .nav a{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem;border-radius:.6rem}
-    .nav a:hover{background:rgba(220,38,38,.06)}
-    .nav a.active{background:linear-gradient(180deg,rgba(220,38,38,.12),rgba(245,158,11,.12));border:1px solid rgba(220,38,38,.25)}
+    .nav a:hover{background:rgba(32,96,200,.08)}
+    .nav a.active{background:linear-gradient(135deg,rgba(32,96,200,.18),rgba(79,136,255,.18));border:1px solid rgba(32,96,200,.28);color:var(--brand-700)}
     .link-muted{color:var(--muted)}
     /* HERO */
     .hero{border-radius:1rem; overflow:hidden}
-    .hero-bg{background:linear-gradient(135deg, rgba(220,38,38,1), rgba(245,158,11,1));}
+    .hero-bg{background:linear-gradient(135deg, rgba(32,96,200,1), rgba(79,136,255,1));}
     .hero .glass{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25)}
-    html[data-theme=dark] .hero .glass{background:rgba(0,0,0,.2); border-color:rgba(255,255,255,.15)}
+    html[data-theme=dark] .hero .glass{background:rgba(19,26,45,.45); border-color:rgba(79,136,255,.25)}
   </style>';
   echo '<script>
   (function(){

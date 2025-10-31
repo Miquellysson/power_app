@@ -80,6 +80,39 @@ if (!function_exists('sanitize_builder_output')) {
   }
 }
 
+if (!function_exists('whatsapp_widget_config')) {
+  function whatsapp_widget_config() {
+    static $cacheReady = false;
+    static $cache = null;
+    if ($cacheReady) {
+      return $cache;
+    }
+    $cacheReady = true;
+    $enabled = setting_get('whatsapp_enabled', '0');
+    if ((int)$enabled !== 1) {
+      return null;
+    }
+    $rawNumber = setting_get('whatsapp_number', '');
+    $number = preg_replace('/\D+/', '', (string)$rawNumber);
+    if ($number === '') {
+      return null;
+    }
+    $buttonText = setting_get('whatsapp_button_text', 'Fale com a gente');
+    $message = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
+    $displayNumber = $number;
+    if ($displayNumber !== '') {
+      $displayNumber = '+' . $displayNumber;
+    }
+    $cache = [
+      'number' => $number,
+      'button_text' => $buttonText,
+      'message' => $message,
+      'display_number' => $displayNumber
+    ];
+    return $cache;
+  }
+}
+
 function load_payment_methods(PDO $pdo, array $cfg): array {
   static $cache = null;
   if ($cache !== null) {
@@ -285,9 +318,9 @@ function app_header() {
   echo '  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">';
   echo '    <a href="?route=home" class="flex items-center gap-3">';
   if ($logo) {
-    echo '      <img src="'.htmlspecialchars($logo).'" class="w-10 h-10 rounded-lg object-cover" alt="logo">';
+    echo '      <img src="'.htmlspecialchars($logo).'" class="w-14 h-14 rounded-xl object-cover" alt="logo">';
   } else {
-    echo '      <div class="w-10 h-10 rounded-lg bg-brand-700 text-white grid place-items-center"><i class="fas fa-pills"></i></div>';
+    echo '      <div class="w-14 h-14 rounded-xl bg-brand-700 text-white grid place-items-center text-xl"><i class="fas fa-pills"></i></div>';
   }
   echo '      <div>';
   $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
@@ -310,6 +343,12 @@ function app_header() {
   }
   echo '        </select>';
   echo '      </div>';
+
+  // Minha conta
+  echo '      <a href="?route=account" class="px-3 py-2 rounded-lg border border-brand-200 text-brand-700 bg-white hover:bg-brand-50 flex items-center gap-2 text-sm">';
+  echo '        <i class="fa-solid fa-user-circle"></i>';
+  echo '        <span class="hidden sm:inline">Minha conta</span>';
+  echo '      </a>';
 
   // Carrinho
   echo '      <a href="?route=cart" class="relative">';
@@ -367,6 +406,28 @@ function app_footer() {
   echo '  </div>';
   echo '  <div class="text-center text-xs text-gray-500 py-4 border-t">&copy; '.date('Y').' FarmaFixed. Todos os direitos reservados.</div>';
   echo '</footer>';
+  $whats = whatsapp_widget_config();
+  if ($whats) {
+    $buttonText = htmlspecialchars($whats['button_text'], ENT_QUOTES, 'UTF-8');
+    $displayNumber = htmlspecialchars($whats['display_number'], ENT_QUOTES, 'UTF-8');
+    $message = $whats['message'] ?? '';
+    $url = 'https://wa.me/'.$whats['number'];
+    if ($message !== '') {
+      $url .= '?text='.rawurlencode($message);
+    }
+    $urlAttr = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+    echo '<div class="fixed z-50 bottom-5 right-4 sm:bottom-8 sm:right-6">';
+    echo '  <a href="'.$urlAttr.'" target="_blank" rel="noopener noreferrer" class="group flex items-center gap-3 bg-[#25D366] text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-1">';
+    echo '    <span class="text-2xl"><i class="fa-brands fa-whatsapp"></i></span>';
+    echo '    <span class="flex flex-col leading-tight">';
+    echo '      <span class="text-sm font-semibold">'.$buttonText.'</span>';
+    if ($displayNumber !== '+') {
+      echo '      <span class="text-xs opacity-80">'.$displayNumber.'</span>';
+    }
+    echo '    </span>';
+    echo '  </a>';
+    echo '</div>';
+  }
 
   /* === Banner Add To Home Screen (A2HS) — Android + iOS === */
   echo '<div id="a2hsBanner" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-xl px-4 py-3 flex items-center gap-3 border hidden z-50">';
@@ -589,6 +650,11 @@ if ($route === 'home') {
     $categories = $pdo->query("SELECT * FROM categories WHERE active=1 ORDER BY sort_order, name")->fetchAll();
   } catch (Throwable $e) { /* sem categorias ainda */ }
 
+  $heroTitle = setting_get('home_hero_title', 'Tudo para sua saúde');
+  $heroSubtitle = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
+  $heroTitleHtml = htmlspecialchars($heroTitle, ENT_QUOTES, 'UTF-8');
+  $heroSubtitleHtml = htmlspecialchars($heroSubtitle, ENT_QUOTES, 'UTF-8');
+
   if ($hasCustomLayout) {
     if ($builderCss !== '') {
       echo '<style id="home-builder-css">'.$builderCss.'</style>';
@@ -604,8 +670,8 @@ if ($route === 'home') {
   } else {
     echo '<section class="bg-gradient-to-br from-brand-700 to-amber-400 text-white py-10 mb-8">';
     echo '  <div class="max-w-7xl mx-auto px-4 text-center">';
-    echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">Tudo para sua saúde</h2>';
-    echo '    <p class="text-white/90 text-lg mb-6">Experiência de app, rápida e segura</p>';
+    echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">'.$heroTitleHtml.'</h2>';
+    echo '    <p class="text-white/90 text-lg mb-6">'.$heroSubtitleHtml.'</p>';
     echo '    <form method="get" class="max-w-2xl mx-auto flex gap-2">';
     echo '      <input type="hidden" name="route" value="home">';
     echo '      <input class="flex-1 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-white/30" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
@@ -751,6 +817,155 @@ if ($route === 'home') {
     echo '</div>';
   }
 
+  echo '</section>';
+  app_footer();
+  exit;
+}
+
+// ACCOUNT AREA
+if ($route === 'account') {
+  app_header();
+  $pdo = db();
+  $errorMsg = null;
+
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+    if (!empty($_POST['logout'])) {
+      unset($_SESSION['account_portal_email']);
+      header('Location: ?route=account');
+      exit;
+    }
+    $emailInput = strtolower(trim((string)($_POST['email'] ?? '')));
+    $orderIdInput = (int)($_POST['order_id'] ?? 0);
+    if (!validate_email($emailInput) || $orderIdInput <= 0) {
+      $errorMsg = 'Informe um e-mail válido e o número do pedido.';
+    } else {
+      $verify = $pdo->prepare("SELECT COUNT(*) FROM orders o INNER JOIN customers c ON c.id = o.customer_id WHERE o.id = ? AND LOWER(c.email) = ?");
+      $verify->execute([$orderIdInput, $emailInput]);
+      if ($verify->fetchColumn()) {
+        $_SESSION['account_portal_email'] = $emailInput;
+        header('Location: ?route=account');
+        exit;
+      } else {
+        $errorMsg = 'Não encontramos nenhum pedido para esses dados. Verifique o número e o e-mail utilizados na compra.';
+      }
+    }
+  }
+
+  $accountEmail = $_SESSION['account_portal_email'] ?? null;
+  $ordersList = [];
+  if ($accountEmail) {
+    $ordersStmt = $pdo->prepare("SELECT o.*, c.name AS customer_name, c.email AS customer_email FROM orders o INNER JOIN customers c ON c.id = o.customer_id WHERE LOWER(c.email) = ? ORDER BY o.created_at DESC");
+    $ordersStmt->execute([$accountEmail]);
+    $ordersList = $ordersStmt->fetchAll(PDO::FETCH_ASSOC);
+  }
+
+  $currency = $cfg['store']['currency'] ?? 'USD';
+  $statusMap = [
+    'pending' => ['Pendente', 'bg-amber-100 text-amber-700'],
+    'paid' => ['Pago', 'bg-emerald-100 text-emerald-700'],
+    'processing' => ['Em processamento', 'bg-blue-100 text-blue-700'],
+    'shipped' => ['Enviado', 'bg-sky-100 text-sky-700'],
+    'completed' => ['Concluído', 'bg-emerald-100 text-emerald-700'],
+    'cancelled' => ['Cancelado', 'bg-red-100 text-red-700']
+  ];
+
+  echo '<section class="max-w-5xl mx-auto px-4 py-10">';
+  echo '  <div class="bg-white rounded-3xl shadow-lg p-6 md:p-8 space-y-6">';
+  echo '    <div class="flex items-start justify-between gap-4 flex-wrap">';
+  echo '      <div>';
+  echo '        <h2 class="text-2xl font-bold">Minha conta</h2>';
+  echo '        <p class="text-sm text-gray-500">Consulte seus pedidos utilizando o e-mail cadastrado e o número do pedido.</p>';
+  echo '      </div>';
+  if ($accountEmail) {
+    echo '      <form method="post" class="flex items-center gap-2">';
+    echo '        <input type="hidden" name="csrf" value="'.csrf_token().'">';
+    echo '        <input type="hidden" name="logout" value="1">';
+    echo '        <span class="text-sm text-gray-600 hidden sm:inline">Logado como <strong>'.htmlspecialchars($accountEmail, ENT_QUOTES, 'UTF-8').'</strong></span>';
+    echo '        <button type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm"><i class="fa-solid fa-right-from-bracket mr-1"></i>Sair</button>';
+    echo '      </form>';
+  }
+  echo '    </div>';
+
+  if ($errorMsg) {
+    echo '    <div class="px-4 py-3 rounded-xl bg-red-50 text-red-700 flex items-center gap-2"><i class="fa-solid fa-circle-exclamation"></i><span>'.htmlspecialchars($errorMsg, ENT_QUOTES, 'UTF-8').'</span></div>';
+  }
+
+  if (!$accountEmail) {
+    echo '    <form method="post" class="grid md:grid-cols-2 gap-4">';
+    echo '      <input type="hidden" name="csrf" value="'.csrf_token().'">';
+    echo '      <div class="md:col-span-2">';
+    echo '        <label class="block text-sm font-medium mb-1">E-mail utilizado na compra</label>';
+    echo '        <input class="input w-full" type="email" name="email" required placeholder="ex.: cliente@exemplo.com">';
+    echo '      </div>';
+    echo '      <div>';
+    echo '        <label class="block text-sm font-medium mb-1">Número do pedido</label>';
+    echo '        <input class="input w-full" type="number" name="order_id" min="1" required placeholder="ex.: 1024">';
+    echo '      </div>';
+    echo '      <div class="md:col-span-2 flex justify-end">';
+    echo '        <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-magnifying-glass mr-2"></i>Consultar pedidos</button>';
+    echo '      </div>';
+    echo '    </form>';
+  } else {
+    if (!$ordersList) {
+      echo '    <div class="px-4 py-6 rounded-xl bg-gray-50 text-center text-gray-600">';
+      echo '      <i class="fa-solid fa-box-open text-3xl mb-3"></i>';
+      echo '      <p>Nenhum pedido encontrado para o e-mail informado.</p>';
+      echo '    </div>';
+    } else {
+      foreach ($ordersList as $order) {
+        $created = format_datetime($order['created_at'] ?? '');
+        $statusKey = strtolower((string)($order['status'] ?? ''));
+        $statusInfo = $statusMap[$statusKey] ?? [ucfirst($statusKey ?: 'Desconhecido'), 'bg-gray-100 text-gray-600'];
+        $items = json_decode($order['items_json'] ?? '[]', true);
+        if (!is_array($items)) { $items = []; }
+        $total = format_currency((float)($order['total'] ?? 0), $currency);
+        $shippingCost = format_currency((float)($order['shipping_cost'] ?? 0), $currency);
+        $subtotal = format_currency((float)($order['subtotal'] ?? 0), $currency);
+        $track = trim((string)($order['track_token'] ?? ''));
+
+        echo '    <div class="border border-gray-100 rounded-2xl p-5 space-y-4">';
+        echo '      <div class="flex items-start justify-between gap-3 flex-wrap">';
+        echo '        <div>';
+        echo '          <div class="text-lg font-semibold">Pedido #'.(int)$order['id'].'</div>';
+        echo '          <div class="text-xs text-gray-500">'.$created.'</div>';
+        echo '        </div>';
+        echo '        <span class="px-3 py-1 rounded-full text-xs font-semibold '.$statusInfo[1].'">'.$statusInfo[0].'</span>';
+        echo '      </div>';
+
+        if ($items) {
+          echo '      <div class="space-y-2">';
+          foreach ($items as $item) {
+            $itemName = htmlspecialchars((string)($item['name'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $itemQty = (int)($item['qty'] ?? 0);
+            $itemPrice = format_currency((float)($item['price'] ?? 0), $currency);
+            echo '        <div class="flex items-center justify-between text-sm border-b border-dotted pb-1">';
+            echo '          <span>'.$itemName.' <span class="text-gray-500">(Qtd: '.$itemQty.')</span></span>';
+            echo '          <span>'.$itemPrice.'</span>';
+            echo '        </div>';
+          }
+          echo '      </div>';
+        }
+
+        echo '      <div class="grid md:grid-cols-3 gap-3 text-sm bg-gray-50 rounded-xl p-4">';
+        echo '        <div><span class="text-gray-500 block text-xs uppercase tracking-wide">Subtotal</span><strong>'.$subtotal.'</strong></div>';
+        echo '        <div><span class="text-gray-500 block text-xs uppercase tracking-wide">Frete</span><strong>'.$shippingCost.'</strong></div>';
+        echo '        <div><span class="text-gray-500 block text-xs uppercase tracking-wide">Total</span><strong class="text-brand-700">'.$total.'</strong></div>';
+        echo '      </div>';
+
+        echo '      <div class="flex items-center justify-between gap-3 text-sm flex-wrap">';
+        echo '        <div><strong>Pagamento:</strong> '.htmlspecialchars((string)($order['payment_method'] ?? '-'), ENT_QUOTES, 'UTF-8').'</div>';
+        if ($track !== '') {
+          $trackSafe = htmlspecialchars($track, ENT_QUOTES, 'UTF-8');
+          echo '        <a class="text-brand-700 hover:underline flex items-center gap-1" href="?route=track&code='.$trackSafe.'"><i class="fa-solid fa-location-dot"></i> Acompanhar pedido</a>';
+        }
+        echo '      </div>';
+        echo '    </div>';
+      }
+    }
+  }
+
+  echo '  </div>';
   echo '</section>';
   app_footer();
   exit;
@@ -1014,6 +1229,42 @@ echo '      </div>';
   echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-700">$ '.number_format($total,2,',','.').'</span></div>';
   echo '        </div>';
   echo '        <button type="submit" class="w-full mt-5 px-6 py-4 rounded-xl bg-brand-700 text-white hover:bg-brand-800 font-semibold"><i class="fa-solid fa-lock mr-2"></i>'.htmlspecialchars($d["place_order"] ?? "Finalizar Pedido").'</button>';
+  $securityBadges = [
+    [
+      'icon' => 'fa-shield-check',
+      'title' => 'Produtos Originais',
+      'desc' => 'Nossos produtos são 100% originais e testados em laboratório.'
+    ],
+    [
+      'icon' => 'fa-star',
+      'title' => 'Qualidade e Segurança',
+      'desc' => 'Compre com quem se preocupa com a qualidade dos produtos.'
+    ],
+    [
+      'icon' => 'fa-truck-fast',
+      'title' => 'Enviamos Para Todo EUA',
+      'desc' => 'Entrega rápida e segura em todo o EUA.'
+    ],
+    [
+      'icon' => 'fa-lock',
+      'title' => 'Site 100% Seguro',
+      'desc' => 'Seus pagamentos estão seguros com nossa rede de segurança privada.'
+    ],
+  ];
+  echo '        <div class="mt-6 space-y-3">';
+  foreach ($securityBadges as $badge) {
+    $icon = htmlspecialchars($badge['icon'], ENT_QUOTES, 'UTF-8');
+    $title = htmlspecialchars($badge['title'], ENT_QUOTES, 'UTF-8');
+    $desc = htmlspecialchars($badge['desc'], ENT_QUOTES, 'UTF-8');
+    echo '          <div class="flex items-start gap-3 p-3 rounded-xl border border-brand-100 bg-brand-50/40">';
+    echo '            <div class="w-10 h-10 rounded-full bg-brand-700 text-white grid place-items-center text-lg"><i class="fa-solid '.$icon.'"></i></div>';
+    echo '            <div>';
+    echo '              <div class="font-semibold text-sm">'.$title.'</div>';
+    echo '              <p class="text-xs text-gray-600 leading-snug">'.$desc.'</p>';
+    echo '            </div>';
+    echo '          </div>';
+  }
+  echo '        </div>';
   echo '      </div>';
   echo '    </div>';
 
@@ -1247,6 +1498,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     send_notification("new_order","Novo Pedido","Pedido #$order_id de ".sanitize_html($name),["order_id"=>$order_id,"total"=>$total,"payment_method"=>$payment_method]);
     $_SESSION["cart"] = [];
     send_order_confirmation($order_id, $email);
+    send_order_admin_alert($order_id);
     if ($methodType === 'square') {
       $_SESSION['square_redirect_url'] = $squareRedirectUrl;
       $_SESSION['square_redirect_warning'] = $squareWarning;

@@ -502,6 +502,74 @@ if (!function_exists('send_order_confirmation')) {
     }
 }
 
+if (!function_exists('send_order_admin_alert')) {
+    function send_order_admin_alert($order_id, $extraEmails = null) {
+        try {
+            $pdo = db();
+            $stmt = $pdo->prepare("
+                SELECT o.*, c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone
+                FROM orders o
+                LEFT JOIN customers c ON c.id = o.customer_id
+                WHERE o.id = ?
+            ");
+            $stmt->execute([(int)$order_id]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$order) { return false; }
+
+            $items = json_decode($order['items_json'] ?? '[]', true);
+            if (!is_array($items)) { $items = []; }
+
+            $cfg = cfg();
+            $store = $cfg['store'] ?? [];
+            $sname = $store['name'] ?? 'Farma Fácil';
+            $currency = $store['currency'] ?? 'USD';
+
+            $subject = "Novo pedido #{$order_id} - {$sname}";
+
+            $body  = "<h2>Novo pedido recebido</h2>";
+            $body .= "<p><strong>Cliente:</strong> ".sanitize_html($order['customer_name'] ?? '-')."</p>";
+            $body .= "<p><strong>E-mail:</strong> ".sanitize_html($order['customer_email'] ?? '-')." | <strong>Telefone:</strong> ".sanitize_html($order['customer_phone'] ?? '-')."</p>";
+            $body .= "<p><strong>Pagamento:</strong> ".sanitize_html($order['payment_method'] ?? '-')."</p>";
+            $body .= "<p><strong>Total:</strong> ".format_currency((float)($order['total'] ?? 0), $currency)."</p>";
+            $body .= "<h3>Itens</h3><ul>";
+            foreach ($items as $item) {
+                $nm = sanitize_html($item['name'] ?? '');
+                $qt = (int)($item['qty'] ?? 0);
+                $vl = (float)($item['price'] ?? 0);
+                $body .= "<li>{$nm} — Qtd: {$qt} — ".format_currency($vl * $qt, $currency)."</li>";
+            }
+            $body .= "</ul>";
+            $body .= "<p>Acesse o painel para atualizar o status do pedido.</p>";
+
+            $recipients = [];
+            if ($extraEmails) {
+                if (is_array($extraEmails)) {
+                    $recipients = array_merge($recipients, $extraEmails);
+                } else {
+                    $recipients[] = (string)$extraEmails;
+                }
+            }
+            $recipients[] = $store['support_email'] ?? null;
+            $recipients[] = 'mike@arkaleads.com';
+
+            $recipients = array_filter(array_unique(array_map('trim', $recipients)));
+            $success = true;
+            foreach ($recipients as $recipient) {
+                if (!validate_email($recipient)) {
+                    continue;
+                }
+                if (!send_email($recipient, $subject, $body)) {
+                    $success = false;
+                }
+            }
+            return $success;
+        } catch (Throwable $e) {
+            error_log("Failed to send admin alert: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
 /* =========================================================================
    SETTINGS (chave/valor) - usados no Admin > Configurações
    ========================================================================= */
