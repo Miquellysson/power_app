@@ -212,6 +212,13 @@ if ($action==='import') {
     $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
     $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=? WHERE id=?");
     $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NOW())");
+    $categoryIds = [];
+    try {
+      $categoryIds = $pdo->query("SELECT id FROM categories")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+      $categoryIds = [];
+    }
+    $categoryIds = array_map('intval', $categoryIds);
     $pdo->beginTransaction();
     try {
       while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
@@ -247,6 +254,10 @@ if ($action==='import') {
         if (isset($data['category_id']) && $data['category_id'] !== '') {
           $categoryId = (int)$data['category_id'];
           if ($categoryId < 0) $categoryId = null;
+          if ($categoryId !== null && !in_array($categoryId, $categoryIds, true)) {
+            $errors[] = "Linha {$line}: Categoria {$categoryId} não encontrada. Valor ajustado para vazio.";
+            $categoryId = null;
+          }
         }
         $description = $data['description'] ?? '';
         $imagePath = $data['image_path'] ?? null;
@@ -266,6 +277,9 @@ if ($action==='import') {
           $imgToUse = ($imagePath !== null && $imagePath !== '') ? $imagePath : ($existing['image_path'] ?? null);
           $descToUse = $description !== '' ? $description : ($existing['description'] ?? '');
           $categoryToUse = $categoryId ?? ($existing['category_id'] ?? null);
+          if ($categoryToUse !== null && !in_array((int)$categoryToUse, $categoryIds, true)) {
+            $categoryToUse = null;
+          }
           $squareToUse = $squareLink !== '' ? $squareLink : ($existing['square_payment_link'] ?? '');
           $updateStmt->execute([
             $name,
