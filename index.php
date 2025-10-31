@@ -813,18 +813,16 @@ if ($route === 'home') {
   echo '</section>';
 
   echo '<section class="max-w-7xl mx-auto px-4 mb-12">';
-  echo '  <div class="rounded-3xl bg-white shadow-lg overflow-hidden">';
-  echo '    <div class="grid gap-0 md:grid-cols-2">';
-  echo '      <div class="border-b md:border-b-0 md:border-r border-gray-200">';
-  echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
-  echo '          <img src="https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03-1.jpeg" alt="Fale com um especialista" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
-  echo '        </a>';
-  echo '      </div>';
-  echo '      <div>';
-  echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
-  echo '          <img src="https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03.jpeg" alt="Atendimento especializado" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
-  echo '        </a>';
-  echo '      </div>';
+  echo '  <div class="grid gap-4 sm:grid-cols-2">';
+  echo '    <div class="rounded-2xl border border-brand-100 bg-white shadow-sm p-6 flex flex-col gap-2">';
+  echo '      <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 grid place-items-center text-xl"><i class="fa-solid fa-shield-heart"></i></div>';
+  echo '      <h3 class="text-lg font-semibold text-gray-900">Produtos Originais</h3>';
+  echo '      <p class="text-sm text-gray-600 leading-relaxed">Nossos produtos são 100% originais e testados em laboratório.</p>';
+  echo '    </div>';
+  echo '    <div class="rounded-2xl border border-brand-100 bg-white shadow-sm p-6 flex flex-col gap-2">';
+  echo '      <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 grid place-items-center text-xl"><i class="fa-solid fa-medal"></i></div>';
+  echo '      <h3 class="text-lg font-semibold text-gray-900">Qualidade e Segurança</h3>';
+  echo '      <p class="text-sm text-gray-600 leading-relaxed">Compre com quem se preocupa com a qualidade dos produtos.</p>';
   echo '    </div>';
   echo '  </div>';
   echo '</section>';
