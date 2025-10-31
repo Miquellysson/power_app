@@ -22,3 +22,29 @@ body {
   font-family: system-ui, sans-serif;
   transition: background 0.3s, color 0.3s;
 }
+@media (max-width: 640px) {
+  .mobile-grid-products {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .product-card .p-4 {
+    padding: 14px;
+  }
+  header.blur-bg {
+    backdrop-filter: blur(18px);
+    border-bottom: none;
+  }
+  .home-custom-layout .hero-section {
+    padding: 32px 18px;
+    text-align: left;
+  }
+  .home-custom-layout .cta-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .fixed.whatsapp-button {
+    right: 16px;
+    bottom: 16px;
+  }
+}

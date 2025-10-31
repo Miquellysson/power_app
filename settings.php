@@ -286,6 +286,7 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $upload = save_logo_upload($_FILES['store_logo']);
     if (!empty($upload['success'])) {
       setting_set('store_logo_url', $upload['path']);
+      setting_set('store_logo', $upload['path']);
     } else {
       $errors[] = $upload['message'] ?? 'Falha ao enviar logo.';
     }

@@ -797,14 +797,14 @@ if ($route === 'home') {
     echo '  <a href="?route=home" class="inline-block mt-6 px-6 py-3 rounded-lg bg-brand-700 text-white hover:bg-brand-800">Voltar</a>';
     echo '</div>';
   } else {
-    echo '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
+    echo '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mobile-grid-products">';
     foreach ($products as $p) {
       $img = $p['image_path'] ?: 'assets/no-image.png';
       $img = proxy_img($img); // passa pelo proxy se for URL absoluta
       $in_stock = ((int)$p['stock'] > 0);
       echo '<div class="product-card card rounded-2xl shadow hover:shadow-lg transition overflow-hidden">';
       echo '  <div class="relative h-48 overflow-hidden">';
-      echo '    <img src="'.htmlspecialchars($img).'" class="w-full h-full object-cover transition-transform duration-300" alt="'.htmlspecialchars($p['name']).'">';
+        echo '    <img src="'.htmlspecialchars($img).'" class="w-full h-full object-cover transition-transform duration-300" alt="'.htmlspecialchars($p['name']).'">';
       if (!empty($p['category_name'])) {
         echo '  <div class="absolute top-3 right-3 text-xs bg-white/90 rounded-full px-2 py-1 text-brand-700">'.htmlspecialchars($p['category_name']).'</div>';
       }
