@@ -256,6 +256,41 @@ if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD']
 
 if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  $errors = [];
+
+  $storeName = pm_sanitize($_POST['store_name'] ?? '', 120);
+  if ($storeName === '') {
+    $errors[] = 'Informe o nome da loja.';
+  } else {
+    setting_set('store_name', $storeName);
+  }
+
+  $storeEmail = trim((string)($_POST['store_email'] ?? ''));
+  if ($storeEmail !== '') {
+    if (validate_email($storeEmail)) {
+      setting_set('store_email', $storeEmail);
+    } else {
+      $errors[] = 'E-mail de suporte inválido.';
+    }
+  } else {
+    setting_set('store_email', '');
+  }
+
+  $storePhone = pm_sanitize($_POST['store_phone'] ?? '', 60);
+  setting_set('store_phone', $storePhone);
+
+  $storeAddress = pm_sanitize($_POST['store_address'] ?? '', 240);
+  setting_set('store_address', $storeAddress);
+
+  if (!empty($_FILES['store_logo']['name'])) {
+    $upload = save_logo_upload($_FILES['store_logo']);
+    if (!empty($upload['success'])) {
+      setting_set('store_logo_url', $upload['path']);
+    } else {
+      $errors[] = $upload['message'] ?? 'Falha ao enviar logo.';
+    }
+  }
+
   $heroTitle = pm_sanitize($_POST['home_hero_title'] ?? '', 160);
   $heroSubtitle = pm_sanitize($_POST['home_hero_subtitle'] ?? '', 240);
   if ($heroTitle === '') {
@@ -282,6 +317,12 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   setting_set('whatsapp_number', $whatsNumber);
   setting_set('whatsapp_button_text', $whatsButtonText);
   setting_set('whatsapp_message', $whatsMessage);
+
+  if ($errors) {
+    $_SESSION['settings_general_error'] = implode(' ', $errors);
+    header('Location: settings.php?tab=general&error=1');
+    exit;
+  }
 
   header('Location: settings.php?tab=general&saved=1');
   exit;
@@ -320,6 +361,15 @@ $layoutData = [
   'csrf' => csrf_token(),
 ];
 $layoutJson = json_encode($layoutData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+$storeCfg = cfg()['store'] ?? [];
+$storeNameCurrent = setting_get('store_name', $storeCfg['name'] ?? 'Farma Fácil');
+$storeEmailCurrent = setting_get('store_email', $storeCfg['support_email'] ?? 'contato@example.com');
+$storePhoneCurrent = setting_get('store_phone', $storeCfg['phone'] ?? '');
+$storeAddressCurrent = setting_get('store_address', $storeCfg['address'] ?? '');
+$storeLogoCurrent = get_logo_path();
+$generalError = $_SESSION['settings_general_error'] ?? '';
+unset($_SESSION['settings_general_error']);
 
 $sections = [
   [
@@ -387,39 +437,15 @@ admin_header('Configurações');
     <?php if (isset($_GET['saved'])): ?>
       <div class="alert alert-success">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Textos da página inicial atualizados com sucesso.</span>
+        <span>Configurações atualizadas com sucesso.</span>
       </div>
     <?php endif; ?>
-    <form class="grid md:grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-medium mb-1">Nome da loja</label>
-        <input class="input w-full" placeholder="Farma Fácil" value="<?= sanitize_html(setting_get('store_name', cfg()['store']['name'] ?? '')); ?>" disabled>
+    <?php if ($generalError): ?>
+      <div class="alert alert-error">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span><?= sanitize_html($generalError); ?></span>
       </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">E-mail de suporte</label>
-        <input class="input w-full" placeholder="contato@" value="<?= sanitize_html(setting_get('store_email', cfg()['store']['support_email'] ?? '')); ?>" disabled>
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">Telefone</label>
-        <input class="input w-full" placeholder="(82) 99999-9999" value="<?= sanitize_html(setting_get('store_phone', cfg()['store']['phone'] ?? '')); ?>" disabled>
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium mb-1">Endereço</label>
-        <textarea class="textarea w-full" rows="2" disabled><?= sanitize_html(setting_get('store_address', cfg()['store']['address'] ?? '')); ?></textarea>
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium mb-1">Logo atual</label>
-        <?php $logo = get_logo_path(); if ($logo): ?>
-          <img src="<?= sanitize_html($logo); ?>" alt="Logo" class="h-24 object-contain">
-        <?php else: ?>
-          <p class="text-sm text-gray-500">Sem logo configurada.</p>
-        <?php endif; ?>
-      </div>
-      <p class="text-sm text-gray-500 md:col-span-2">Os dados acima são apenas leitura nesta tela. Atualize-os via painel de administração original ou implemente aqui conforme necessidade.</p>
-    </form>
-
-    <hr class="my-6">
-
+    <?php endif; ?>
     <?php
       $heroTitleCurrent = setting_get('home_hero_title', 'Tudo para sua saúde');
       $heroSubtitleCurrent = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
@@ -428,9 +454,40 @@ admin_header('Configurações');
       $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
       $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
     ?>
-    <h3 class="text-md font-semibold mb-3">Texto do destaque na Home</h3>
-    <form class="grid md:grid-cols-2 gap-4" method="post" action="settings.php?tab=general&action=save_general">
+    <form class="space-y-6" method="post" enctype="multipart/form-data" action="settings.php?tab=general&action=save_general">
       <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Nome da loja</label>
+          <input class="input w-full" name="store_name" value="<?= sanitize_html($storeNameCurrent); ?>" maxlength="120" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">E-mail de suporte</label>
+          <input class="input w-full" name="store_email" type="email" value="<?= sanitize_html($storeEmailCurrent); ?>" maxlength="160" placeholder="contato@minhaloja.com">
+          <p class="hint mt-1">Utilizado em notificações e exibição para o cliente.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Telefone</label>
+          <input class="input w-full" name="store_phone" value="<?= sanitize_html($storePhoneCurrent); ?>" maxlength="60" placeholder="+1 (305) 555-0123">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Endereço</label>
+          <textarea class="textarea w-full" name="store_address" rows="2" maxlength="240" placeholder="Rua, bairro, cidade, estado"><?= sanitize_html($storeAddressCurrent); ?></textarea>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Logo da loja (PNG/JPG/WEBP · máx 2MB)</label>
+          <?php if ($storeLogoCurrent): ?>
+            <div class="mb-3"><img src="<?= sanitize_html($storeLogoCurrent); ?>" alt="Logo atual" class="h-16 object-contain rounded-md border border-gray-200 p-2 bg-white"></div>
+          <?php else: ?>
+            <p class="hint mb-2">Nenhuma logo encontrada. Você pode enviar uma agora.</p>
+          <?php endif; ?>
+          <input class="block w-full text-sm text-gray-600" type="file" name="store_logo" accept=".png,.jpg,.jpeg,.webp">
+        </div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <h3 class="text-md font-semibold">Texto do destaque na Home</h3>
       <div class="md:col-span-2">
         <label class="block text-sm font-medium mb-1">Título principal</label>
         <input class="input w-full" name="home_hero_title" maxlength="160" value="<?= sanitize_html($heroTitleCurrent); ?>" required>
@@ -467,8 +524,9 @@ admin_header('Configurações');
         </div>
       </div>
 
-      <div class="md:col-span-2 flex justify-end">
-        <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar textos</button>
+      <div class="flex justify-end gap-3">
+        <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar alterações</button>
+        <a href="index.php" target="_blank" class="btn btn-ghost px-5 py-2"><i class="fa-solid fa-up-right-from-square mr-2"></i>Ver loja</a>
       </div>
     </form>
     </div>
