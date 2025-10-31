@@ -1090,7 +1090,9 @@ if ($route === 'cart') {
   $pdo = db();
   $cart = $_SESSION['cart'] ?? [];
   $ids  = array_keys($cart);
-  $items = []; $subtotal = 0.0;
+  $items = [];
+  $subtotal = 0.0;
+  $shippingTotal = 0.0;
 
   if ($ids) {
     $in = implode(',', array_fill(0, count($ids), '?'));
@@ -1100,6 +1102,9 @@ if ($route === 'cart') {
       $qty = (int)($cart[$p['id']] ?? 0);
       $line = (float)$p['price'] * $qty;
       $subtotal += $line;
+      $ship = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
+      if ($ship < 0) { $ship = 0; }
+      $shippingTotal += $ship * $qty;
       $items[] = [
         'id'=>(int)$p['id'],
         'sku'=>$p['sku'],
@@ -1107,10 +1112,14 @@ if ($route === 'cart') {
         'price'=>(float)$p['price'],
         'qty'=>$qty,
         'image'=>$p['image_path'],
-        'stock'=>(int)$p['stock']
+        'stock'=>(int)$p['stock'],
+        'shipping_cost'=>$ship
       ];
     }
   }
+
+  $shippingTotal = max(0, $shippingTotal);
+  $cartTotal = $subtotal + $shippingTotal;
 
   echo '<section class="max-w-5xl mx-auto px-4 py-8">';
   echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-bag-shopping mr-2 text-brand-700"></i>'.htmlspecialchars($d['cart'] ?? 'Carrinho').'</h2>';
@@ -1144,9 +1153,19 @@ if ($route === 'cart') {
       echo '  </div>';
     }
     echo '  </div>';
-    echo '  <div class="p-4 bg-gray-50 flex items-center justify-between">';
-    echo '    <div class="text-lg font-semibold">Subtotal</div>';
-    echo '    <div class="text-2xl font-bold text-brand-700">$ '.number_format($subtotal,2,',','.').'</div>';
+    echo '  <div class="p-4 bg-gray-50 space-y-2">';
+    echo '    <div class="flex items-center justify-between">';
+    echo '      <span class="text-lg font-semibold">Subtotal</span>';
+    echo '      <span class="text-2xl font-bold text-brand-700">$ '.number_format($subtotal,2,',','.').'</span>';
+    echo '    </div>';
+    echo '    <div class="flex items-center justify-between text-sm text-gray-600">';
+    echo '      <span>Frete</span>';
+    echo '      <span class="font-semibold">$ '.number_format($shippingTotal,2,',','.').'</span>';
+    echo '    </div>';
+    echo '    <div class="flex items-center justify-between text-lg font-bold">';
+    echo '      <span>Total</span>';
+    echo '      <span class="text-brand-700 text-2xl">$ '.number_format($cartTotal,2,',','.').'</span>';
+    echo '    </div>';
     echo '  </div>';
     echo '  <div class="p-4 flex gap-3">';
     echo '    <a href="?route=home" class="px-5 py-3 rounded-lg border">Continuar comprando</a>';
@@ -1204,15 +1223,18 @@ if ($route === 'checkout') {
   $pdo = db();
   $ids = array_keys($cart);
   $in  = implode(',', array_fill(0, count($ids), '?'));
-  $st  = $pdo->prepare("SELECT id, name, price, stock FROM products WHERE id IN ($in) AND active=1");
+  $st  = $pdo->prepare("SELECT id, name, price, stock, shipping_cost FROM products WHERE id IN ($in) AND active=1");
   $st->execute($ids);
-  $items = []; $subtotal = 0.0;
+  $items = []; $subtotal = 0.0; $shipping = 0.0;
   foreach ($st as $p) {
     $qty = (int)($cart[$p['id']] ?? 0);
-    $items[] = ['id'=>(int)$p['id'], 'name'=>$p['name'], 'price'=>(float)$p['price'], 'qty'=>$qty];
+    $shipCost = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
+    if ($shipCost < 0) { $shipCost = 0; }
+    $items[] = ['id'=>(int)$p['id'], 'name'=>$p['name'], 'price'=>(float)$p['price'], 'qty'=>$qty, 'shipping_cost'=>$shipCost];
     $subtotal += (float)$p['price'] * $qty;
+    $shipping += $shipCost * $qty;
   }
-  $shipping = 7.00;
+  $shipping = max(0, $shipping);
   $total = $subtotal + $shipping;
 
   // Métodos de pagamento dinâmicos
@@ -1311,7 +1333,7 @@ echo '      </div>';
   }
   echo '        <div class="mt-4 space-y-1">';
   echo '          <div class="flex justify-between"><span>'.htmlspecialchars($d["subtotal"] ?? "Subtotal").'</span><span>$ '.number_format($subtotal,2,',','.').'</span></div>';
-  echo '          <div class="flex justify-between text-green-600"><span>Frete</span><span>$ 7.00</span></div>';
+  echo '          <div class="flex justify-between text-green-600"><span>Frete</span><span>$ '.number_format($shipping,2,',','.').'</span></div>';
   echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-600">$ '.number_format($total,2,',','.').'</span></div>';
   echo '        </div>';
   echo '        <button type="submit" class="w-full mt-5 px-6 py-4 rounded-xl bg-brand-600 text-white hover:bg-brand-700 font-semibold"><i class="fa-solid fa-lock mr-2"></i>'.htmlspecialchars($d["place_order"] ?? "Finalizar Pedido").'</button>';
@@ -1407,21 +1429,26 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $st  = $pdo->prepare("SELECT * FROM products WHERE id IN ($in) AND active=1");
   $st->execute($ids);
 
-  $items = []; $subtotal = 0.0;
+  $items = []; $subtotal = 0.0; $shipping = 0.0;
   foreach ($st as $p) {
     $qty = (int)($cart[$p['id']] ?? 0);
     if ((int)$p['stock'] < $qty) die('Produto '.$p['name'].' sem estoque');
+    $shipCost = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
+    if ($shipCost < 0) { $shipCost = 0; }
     $items[] = [
       'id'=>(int)$p['id'],
       'name'=>$p['name'],
       'price'=>(float)$p['price'],
       'qty'=>$qty,
       'sku'=>$p['sku'],
+      'shipping_cost'=>$shipCost,
       'square_link'=> trim((string)($p['square_payment_link'] ?? ''))
     ];
     $subtotal += (float)$p['price'] * $qty;
+    $shipping += $shipCost * $qty;
   }
-  $shipping = 7.00; $total = $subtotal + $shipping;
+  $shipping = max(0, $shipping);
+  $total = $subtotal + $shipping;
 
   $methods = load_payment_methods($pdo, $cfg);
   $methodMap = [];

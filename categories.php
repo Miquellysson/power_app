@@ -94,6 +94,17 @@ if ($action==='delete') {
   header('Location: categories.php'); exit;
 }
 
+if ($action==='bulk_delete' && $_SERVER['REQUEST_METHOD']==='POST') {
+  if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  $ids = array_filter(array_map('intval', $_POST['selected'] ?? []));
+  if ($ids) {
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $st = $pdo->prepare("DELETE FROM categories WHERE id IN ($placeholders)");
+    $st->execute($ids);
+  }
+  header('Location: categories.php'); exit;
+}
+
 admin_header('Categorias');
 $q = trim((string)($_GET['q'] ?? ''));
 $w=' WHERE 1=1 '; $p=[];
@@ -102,9 +113,12 @@ $st=$pdo->prepare("SELECT * FROM categories $w ORDER BY sort_order, name LIMIT 2
 $st->execute($p);
 echo '<div class="card"><div class="card-title">Categorias</div>';
 echo '<div class="p-3 row gap"><form class="row gap search"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form><a class="btn alt" href="categories.php?action=new"><i class="fa-solid fa-plus"></i> Nova</a></div>';
-echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th>#</th><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr></thead><tbody>';
+echo '<form method="post" action="categories.php?action=bulk_delete">';
+echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
+echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th><input type="checkbox" id="checkAllCategories"></th><th>#</th><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr></thead><tbody>';
 foreach($st as $c){
   echo '<tr>';
+  echo '<td><input type="checkbox" name="selected[]" value="'.(int)$c['id'].'"></td>';
   echo '<td>'.(int)$c['id'].'</td>';
   echo '<td>'.sanitize_html($c['name']).'</td>';
   echo '<td>'.(int)$c['sort_order'].'</td>';
@@ -112,5 +126,13 @@ foreach($st as $c){
   echo '<td><a class="btn" href="categories.php?action=edit&id='.(int)$c['id'].'"><i class="fa-solid fa-pen"></i> Editar</a> <a class="btn" href="categories.php?action=delete&id='.(int)$c['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Excluir categoria?\')"><i class="fa-solid fa-trash"></i> Excluir</a></td>';
   echo '</tr>';
 }
-echo '</tbody></table></div></div>';
+echo '</tbody></table></div>';
+echo '<div class="p-3 flex justify-end border-t"><button type="submit" class="btn btn-danger" onclick="return confirm(\'Excluir as categorias selecionadas?\')"><i class="fa-solid fa-trash-can mr-2"></i>Excluir selecionadas</button></div>';
+echo '</form></div>';
+echo '<script>
+document.getElementById("checkAllCategories")?.addEventListener("change",function(e){
+  const checked=e.target.checked;
+  document.querySelectorAll("input[name=\\"selected[]\\"]").forEach(cb=>cb.checked=checked);
+});
+</script>';
 admin_footer();

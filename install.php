@@ -20,9 +20,11 @@ try {
   // ===== USERS =====
   $pdo->exec("CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL DEFAULT '',
     email VARCHAR(190) UNIQUE NOT NULL,
     pass VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'admin',
+    active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
@@ -46,6 +48,7 @@ try {
     name VARCHAR(190) NOT NULL,
     description TEXT,
     price DECIMAL(10,2) NOT NULL,
+    shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00,
     stock INT NOT NULL DEFAULT 100,
     image_path VARCHAR(255) NULL,
     square_payment_link VARCHAR(255) NULL,
@@ -160,11 +163,12 @@ try {
 
   // ===== ALTERs idempotentes para colunas faltantes =====
   $tables_columns = [
-    'products'        => ['category_id','square_payment_link','active','featured','meta_title','meta_description','updated_at'],
+    'products'        => ['category_id','square_payment_link','active','featured','meta_title','meta_description','updated_at','shipping_cost'],
     'customers'       => ['city','state','zipcode','country'],
     'orders'          => ['shipping_cost','total','payment_status','admin_viewed','notes','updated_at','track_token'],
     'page_layouts'    => ['meta'],
-    'payment_methods' => ['description','instructions','settings','icon_path','require_receipt','sort_order']
+    'payment_methods' => ['description','instructions','settings','icon_path','require_receipt','sort_order'],
+    'users'           => ['name','role','active']
   ];
 
   foreach ($tables_columns as $table => $columns) {
@@ -192,6 +196,10 @@ try {
             break;
           case 'products.updated_at':
             $pdo->exec("ALTER TABLE products ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+            break;
+          case 'products.shipping_cost':
+            $pdo->exec("ALTER TABLE products ADD COLUMN shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00 AFTER price");
+            $pdo->exec("UPDATE products SET shipping_cost = 7.00 WHERE shipping_cost IS NULL");
             break;
           case 'customers.city':
             $pdo->exec("ALTER TABLE customers ADD COLUMN city VARCHAR(100)");
@@ -247,10 +255,27 @@ try {
           case 'payment_methods.sort_order':
             $pdo->exec("ALTER TABLE payment_methods ADD COLUMN sort_order INT DEFAULT 0 AFTER require_receipt");
             break;
+          case 'users.name':
+            $pdo->exec("ALTER TABLE users ADD COLUMN name VARCHAR(120) NOT NULL DEFAULT '' AFTER id");
+            break;
+          case 'users.role':
+            $pdo->exec("ALTER TABLE users ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'admin'");
+            break;
+          case 'users.active':
+            $pdo->exec("ALTER TABLE users ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1 AFTER role");
+            break;
         }
       }
-    }
   }
+}
+
+  // ajustes de dados
+  try {
+    $pdo->exec("UPDATE users SET name = email WHERE (name IS NULL OR name = '') AND email <> ''");
+  } catch (Throwable $e) {}
+  try {
+    $pdo->exec("UPDATE products SET shipping_cost = 7.00 WHERE shipping_cost IS NULL");
+  } catch (Throwable $e) {}
 
   // ===== Admin seed =====
   // As constantes ADMIN_EMAIL e ADMIN_PASS_HASH vêm do config.php

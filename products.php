@@ -111,6 +111,7 @@ function product_form($row){
   $name = sanitize_html($row['name'] ?? '');
   $sku = sanitize_html($row['sku'] ?? '');
   $price = number_format((float)($row['price'] ?? 0), 2, '.', '');
+  $shippingCost = number_format((float)($row['shipping_cost'] ?? 7.00), 2, '.', '');
   $stock = (int)($row['stock'] ?? 0);
   $category_id = (int)($row['category_id'] ?? 0);
   $desc = sanitize_html($row['description'] ?? '');
@@ -126,6 +127,7 @@ function product_form($row){
   echo '    <div class="field"><span>Nome</span><input class="input" name="name" value="'.$name.'" required></div>';
   echo '    <div class="field"><span>SKU</span><input class="input" name="sku" value="'.$sku.'" required></div>';
   echo '    <div class="field"><span>Preço</span><input class="input" name="price" type="number" step="0.01" value="'.$price.'" required></div>';
+  echo '    <div class="field"><span>Frete (US$)</span><input class="input" name="shipping_cost" type="number" step="0.01" value="'.$shippingCost.'" placeholder="7.00"></div>';
   echo '    <div class="field"><span>Estoque</span><input class="input" name="stock" type="number" value="'.$stock.'" required></div>';
   echo '    <div class="field"><span>Categoria</span><select class="select" name="category_id">'.categories_options($GLOBALS["pdo"], $category_id).'</select></div>';
   echo '    <div class="field"><span>Ativo</span><select class="select" name="active"><option value="1" '.($active? 'selected':'').'>Sim</option><option value="0" '.(!$active? 'selected':'').'>Não</option></select></div>';
@@ -151,13 +153,14 @@ if ($action==='export') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename="produtos-'.date('Ymd-His').'.csv"');
   $out = fopen('php://output', 'w');
-  fputcsv($out, ['sku','name','price','stock','category_id','description','image_path','square_payment_link','active']);
-  $stmt = $pdo->query("SELECT sku,name,price,stock,category_id,description,image_path,square_payment_link,active FROM products ORDER BY id ASC");
+  fputcsv($out, ['sku','name','price','shipping_cost','stock','category_id','description','image_path','square_payment_link','active']);
+  $stmt = $pdo->query("SELECT sku,name,price,shipping_cost,stock,category_id,description,image_path,square_payment_link,active FROM products ORDER BY id ASC");
   foreach ($stmt as $row) {
     fputcsv($out, [
       $row['sku'],
       $row['name'],
       number_format((float)$row['price'], 2, '.', ''),
+      number_format((float)($row['shipping_cost'] ?? 7), 2, '.', ''),
       (int)$row['stock'],
       $row['category_id'],
       $row['description'],
@@ -210,8 +213,8 @@ if ($action==='import') {
     $errors = [];
     $line = 1;
     $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
-    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=? WHERE id=?");
-    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NOW())");
+    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=? WHERE id=?");
+    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW())");
     $categoryIds = [];
     try {
       $categoryIds = $pdo->query("SELECT id FROM categories")->fetchAll(PDO::FETCH_COLUMN);
@@ -249,6 +252,11 @@ if ($action==='import') {
           continue;
         }
         $price = (float)$priceRaw;
+        $shippingRaw = str_replace(['.',','], ['','.'], $data['shipping_cost'] ?? '7');
+        if ($shippingRaw === '' || !is_numeric($shippingRaw)) {
+          $shippingRaw = '7';
+        }
+        $shippingCost = max(0, (float)$shippingRaw);
         $stock = (int)($data['stock'] ?? 0);
         $categoryId = null;
         if (isset($data['category_id']) && $data['category_id'] !== '') {
@@ -285,6 +293,7 @@ if ($action==='import') {
             $name,
             $sku,
             $price,
+            $shippingCost,
             $stock,
             $categoryToUse,
             $descToUse,
@@ -300,6 +309,7 @@ if ($action==='import') {
             $name,
             $sku,
             $price,
+            $shippingCost,
             $stock,
             $categoryId,
             $description,
@@ -368,6 +378,10 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $name = sanitize_string($_POST['name'] ?? '');
   $sku  = sanitize_string($_POST['sku'] ?? '');
   $price= (float)($_POST['price'] ?? 0);
+  $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
+  if ($shipping_cost < 0) $shipping_cost = 0;
+  $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
+  if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
   $description = sanitize_string($_POST['description'] ?? '', 2000);
@@ -383,6 +397,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     product_form([
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+      'shipping_cost'=>$shipping_cost,
       'square_payment_link'=>$square_input
     ]);
     echo '</div>';
@@ -398,6 +413,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     product_form([
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+      'shipping_cost'=>$shipping_cost,
       'square_payment_link'=>$square_input
     ]);
     echo '</div>';
@@ -414,9 +430,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NOW())");
+  $st=$pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW())");
   try {
-    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path,$square_link]);
+    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     // Proteção extra caso outro processo crie o mesmo SKU no intervalo
@@ -473,7 +489,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
     echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($square_error).'</div>';
     product_form([
-      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
       'square_payment_link'=>$square_input
     ]);
@@ -487,7 +503,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
     echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> SKU já utilizado por outro produto: <b>'.sanitize_html($sku).'</b>.</div>';
     product_form([
-      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
       'square_payment_link'=>$square_input
     ]);
@@ -505,9 +521,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=? WHERE id=?");
+  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=? WHERE id=?");
   try {
-    $st->execute([$name,$sku,$price,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$id]);
+    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$id]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     if (!empty($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062) {
@@ -593,7 +609,7 @@ echo '  </div>';
 echo '</div>';
 echo '<form id="bulk-delete-form" method="post" action="products.php?action=bulk_destroy">';
 echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
-echo '  <div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th><input type="checkbox" id="checkAllProducts"></th><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
+echo '  <div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th><input type="checkbox" id="checkAllProducts"></th><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Frete</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
 foreach($st as $r){
   echo '<tr>';
   echo '<td><input type="checkbox" name="selected[]" value="'.(int)$r['id'].'" class="product-select"></td>';
@@ -602,6 +618,7 @@ foreach($st as $r){
   echo '<td>'.sanitize_html($r['name']).'</td>';
   echo '<td>'.sanitize_html($r['category_name']).'</td>';
   echo '<td>$ '.number_format((float)$r['price'],2,',','.').'</td>';
+  echo '<td>$ '.number_format((float)($r['shipping_cost'] ?? 7),2,',','.').'</td>';
   echo '<td>'.(int)$r['stock'].'</td>';
   $squareCol = trim((string)($r['square_payment_link'] ?? ''));
   if ($squareCol !== '') {
