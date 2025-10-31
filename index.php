@@ -666,7 +666,14 @@ if ($route === 'home') {
   // categorias ativas
   $categories = [];
   try {
-    $categories = $pdo->query("SELECT * FROM categories WHERE active=1 ORDER BY sort_order, name")->fetchAll();
+    $sqlCategories = "
+      SELECT DISTINCT c.*
+      FROM categories c
+      INNER JOIN products p ON p.category_id = c.id AND p.active = 1
+      WHERE c.active = 1
+      ORDER BY c.sort_order, c.name
+    ";
+    $categories = $pdo->query($sqlCategories)->fetchAll();
   } catch (Throwable $e) { /* sem categorias ainda */ }
 
   $heroTitle = setting_get('home_hero_title', 'Tudo para sua saúde');
