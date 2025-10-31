@@ -768,8 +768,6 @@ if ($route === 'home') {
   echo '</section>';
 
   // Sessões destaque antes da listagem
-  $ctaImagePrimary = proxy_img('https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03-1.jpeg');
-  $ctaImageSecondary = proxy_img('https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03.jpeg');
   echo '<section class="max-w-7xl mx-auto px-4 mb-10">';
   echo '  <div class="rounded-3xl bg-gradient-to-r from-[#2060C8] to-[#3A7BFF] text-white p-8 shadow-lg">';
   echo '    <div class="grid gap-6 md:grid-cols-3 md:gap-8 items-start">';
@@ -819,12 +817,12 @@ if ($route === 'home') {
   echo '    <div class="grid gap-0 md:grid-cols-2">';
   echo '      <div class="border-b md:border-b-0 md:border-r border-gray-200">';
   echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
-  echo '          <img src="'.htmlspecialchars($ctaImagePrimary, ENT_QUOTES, 'UTF-8').'" alt="Fale com um especialista" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
+  echo '          <img src="https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03-1.jpeg" alt="Fale com um especialista" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
   echo '        </a>';
   echo '      </div>';
   echo '      <div>';
   echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
-  echo '          <img src="'.htmlspecialchars($ctaImageSecondary, ENT_QUOTES, 'UTF-8').'" alt="Atendimento especializado" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
+  echo '          <img src="https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03.jpeg" alt="Atendimento especializado" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
   echo '        </a>';
   echo '      </div>';
   echo '    </div>';
