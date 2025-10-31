@@ -4,16 +4,14 @@
 - `index.php` runs the storefront, while `admin.php` and `admin_app.html` host the admin UI; shared helpers sit under `lib/`.
 - Assets live in `assets/` plus `theme.css`/`theme.js`; translations in `i18n/`; installers e docs (`install.php`, `MIGRATIONS.md`) ficam na raiz junto com diagnósticos rápidos.
 - Cadastro de produtos (`products.php`) persiste o campo `square_payment_link`, usado no checkout para redirecionar ao Square.
-- O editor visual da home vive em `page_builder.php` e salva layouts via `admin_api_layouts.php` na tabela `page_layouts`; o storefront lê a versão publicada antes de renderizar o layout padrão.
-- O gerenciamento de pagamentos fica em `payment_methods.php`, persistindo configurações em `payment_methods`; o checkout consome esses dados com fallback para o config legado.
+- O painel de configurações unificado (`settings.php`) traz abas para dados gerais, métodos de pagamento e editor visual; ainda usa `admin_api_layouts.php` para salvar layouts na tabela `page_layouts` e `payment_methods` para armazenar formas de pagamento.
 - Runtime uploads persist in `storage/` (`zelle_receipts/`, `products/`, `logo/`). Keep writable paths aligned with `config.php` and shielded in production.
 
 ## Build, Test, and Development Commands
 - `php -S localhost:8080 -t .` — start a local PHP server to exercise storefront and admin flows.
 - `php lint_all.php` — syntax-check the entire PHP surface before pushing.
 - `php test.php` and `php selftest.php` — run sanity and environment diagnostics; extend these scripts when adding new integrations.
-- Editor visual: acesse `page_builder.php` logado como admin; use Salvar/Preview/Publicar (requisição AJAX para `admin_api_layouts.php`).
-- Pagamentos: administre métodos em `payment_methods.php` (drag-and-drop, upload de ícone, instruções dinâmicas). O checkout já lê dessa tabela.
+- Configurações: tudo está em `settings.php` — use as abas "Pagamentos" (drag-and-drop, upload de ícone) e "Editor da Home" (GrapesJS com salvar/preview/publicar via `admin_api_layouts.php`).
 
 ## Coding Style & Naming Conventions
 - Follow PSR-12 habits: 4 spaces, braces on the next line, upper snake-case constants (`DB_HOST`), descriptive snake_case helpers.
