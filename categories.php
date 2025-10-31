@@ -31,6 +31,13 @@ if (!function_exists('validate_email')){
 $pdo = db();
 require_admin();
 
+$action = $_GET['action'] ?? 'list';
+$canManageCategories = admin_can('manage_categories');
+$writeActions = ['new','create','edit','update','delete','bulk_delete'];
+if (!$canManageCategories && in_array($action, $writeActions, true)) {
+  require_admin_capability('manage_categories');
+}
+
 $currentAdminIsSuper = is_super_admin();
 
 function category_unique_slug(PDO $pdo, string $name, ?int $ignoreId = null): string {
@@ -56,8 +63,6 @@ function category_unique_slug(PDO $pdo, string $name, ?int $ignoreId = null): st
   }
   return $slug;
 }
-
-$action = $_GET['action'] ?? 'list';
 
 if ($action==='new') {
   admin_header('Nova categoria');
@@ -142,13 +147,20 @@ if ($action==='bulk_delete' && $_SERVER['REQUEST_METHOD']==='POST') {
 }
 
 admin_header('Categorias');
+if (!$canManageCategories) {
+  echo '<div class="alert alert-warning mx-auto max-w-3xl mb-4"><i class="fa-solid fa-circle-info mr-2"></i>Você possui acesso somente leitura nesta seção.</div>';
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $w=' WHERE 1=1 '; $p=[];
 if ($q!==''){ $w.=" AND (name LIKE ?) "; $p=["%$q%"]; }
 $st=$pdo->prepare("SELECT * FROM categories $w ORDER BY sort_order, name LIMIT 200");
 $st->execute($p);
 echo '<div class="card"><div class="card-title">Categorias</div>';
-echo '<div class="p-3 row gap"><form class="row gap search"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form><a class="btn alt" href="categories.php?action=new"><i class="fa-solid fa-plus"></i> Nova</a></div>';
+echo '<div class="p-3 row gap"><form class="row gap search"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form>';
+if ($canManageCategories) {
+  echo '<a class="btn alt" href="categories.php?action=new"><i class="fa-solid fa-plus"></i> Nova</a>';
+}
+echo '</div>';
 echo '<form method="post" action="categories.php?action=bulk_delete">';
 echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
 echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr>';
@@ -169,10 +181,16 @@ foreach($st as $c){
   echo '<td>'.sanitize_html($c['name']).'</td>';
   echo '<td>'.(int)$c['sort_order'].'</td>';
   echo '<td>'.((int)$c['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
-  echo '<td><a class="btn" href="categories.php?action=edit&id='.(int)$c['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  echo '<td>';
+  if ($canManageCategories) {
+    echo '<a class="btn" href="categories.php?action=edit&id='.(int)$c['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  }
   if ($currentAdminIsSuper) {
     $deleteUrl = 'categories.php?action=delete&id='.(int)$c['id'].'&csrf='.csrf_token();
     echo ' <a class="btn" href="'.$deleteUrl.'" onclick="return confirm(\'Excluir categoria?\')"><i class="fa-solid fa-trash"></i> Excluir</a>';
+  }
+  if (!$canManageCategories && !$currentAdminIsSuper) {
+    echo '<span class="text-xs text-gray-400">Somente leitura</span>';
   }
   echo '</td>';
   echo '</tr>';

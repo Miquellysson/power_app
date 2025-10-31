@@ -235,6 +235,7 @@ try{
         $err = 'Usuário inativo. Contate o administrador.';
       } elseif ($userRow && !empty($userRow['pass']) && password_verify($pass, (string)$userRow['pass'])) {
         $role = $userRow['role'] ?: 'admin';
+        session_regenerate_id(true);
         set_admin_session([
           'id'    => (int)$userRow['id'],
           'email' => $userRow['email'] ?? $email,
@@ -264,6 +265,7 @@ try{
         $role = $userRow['role'] ?? 'super_admin';
         $name = $userRow['name'] ?? $email;
         $id   = isset($userRow['id']) ? (int)$userRow['id'] : 1;
+        session_regenerate_id(true);
         set_admin_session([
           'id'    => $id,
           'email' => $email,

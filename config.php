@@ -68,6 +68,12 @@ return [
         'products'       => __DIR__ . '/storage/products',
         'logo'           => __DIR__ . '/storage/logo',
     ],
+    'media' => [
+        'proxy_whitelist' => [
+            'base.rhemacriativa.com',
+            'store.nestgeneralservices.company',
+        ],
+    ],
     'notifications' => [
         'sound_enabled'       => true,
         'email_notifications' => true,

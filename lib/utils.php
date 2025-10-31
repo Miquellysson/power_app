@@ -191,9 +191,135 @@ if (!function_exists('is_super_admin')) {
 if (!function_exists('require_super_admin')) {
     function require_super_admin(): void {
         if (!is_super_admin()) {
-            http_response_code(403);
-            die('Apenas super administradores podem executar esta ação.');
+            admin_forbidden('Apenas super administradores podem executar esta ação.');
         }
+    }
+}
+
+if (!function_exists('admin_forbidden')) {
+    function admin_forbidden(string $message = 'Você não tem permissão para executar esta ação.'): void {
+        http_response_code(403);
+        if (function_exists('admin_header') && function_exists('admin_footer')) {
+            admin_header('Acesso negado');
+            echo '<div class="card p-6 mx-auto max-w-xl mt-10">';
+            echo '<div class="card-title">Permissão negada</div>';
+            echo '<div class="text-sm text-gray-600">'.sanitize_html($message).'</div>';
+            echo '<div class="mt-4"><a class="btn" href="dashboard.php"><i class="fa-solid fa-arrow-left"></i> Voltar ao painel</a></div>';
+            echo '</div>';
+            admin_footer();
+        } else {
+            echo sanitize_html($message);
+        }
+        exit;
+    }
+}
+
+if (!function_exists('admin_role_capabilities')) {
+    function admin_role_capabilities(string $role): array {
+        switch ($role) {
+            case 'super_admin':
+                return ['*'];
+            case 'admin':
+                return [
+                    'manage_products',
+                    'manage_categories',
+                    'manage_orders',
+                    'manage_customers',
+                    'manage_settings',
+                    'manage_payment_methods',
+                    'manage_users',
+                    'manage_builder',
+                ];
+            case 'manager':
+                return [
+                    'manage_products',
+                    'manage_categories',
+                    'manage_orders',
+                    'manage_customers',
+                ];
+            case 'viewer':
+            default:
+                return [];
+        }
+    }
+}
+
+if (!function_exists('admin_can')) {
+    function admin_can(string $capability): bool {
+        if (is_super_admin()) {
+            return true;
+        }
+        $role = current_admin_role();
+        $caps = admin_role_capabilities($role);
+        if (in_array('*', $caps, true)) {
+            return true;
+        }
+        return in_array($capability, $caps, true);
+    }
+}
+
+if (!function_exists('require_admin_capability')) {
+    function require_admin_capability(string $capability): void {
+        if (!admin_can($capability)) {
+            admin_forbidden('Você não tem permissão para executar esta ação.');
+        }
+    }
+}
+
+if (!function_exists('normalize_hex_color')) {
+    function normalize_hex_color(string $hex): string {
+        $hex = ltrim(trim($hex), '#');
+        if (strlen($hex) === 3) {
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+        }
+        $hex = strtoupper(preg_replace('/[^0-9A-F]/i', '', $hex));
+        if (strlen($hex) !== 6) {
+            return '2060C8';
+        }
+        return $hex;
+    }
+}
+
+if (!function_exists('adjust_color_brightness')) {
+    function adjust_color_brightness(string $hex, float $factor): string {
+        $hex = normalize_hex_color($hex);
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+
+        $adjust = function ($channel) use ($factor) {
+            if ($factor >= 0) {
+                $channel = $channel + (255 - $channel) * $factor;
+            } else {
+                $channel = $channel * (1 + $factor);
+            }
+            return (int)max(0, min(255, round($channel)));
+        };
+
+        $r = $adjust($r);
+        $g = $adjust($g);
+        $b = $adjust($b);
+
+        return sprintf('#%02X%02X%02X', $r, $g, $b);
+    }
+}
+
+if (!function_exists('generate_brand_palette')) {
+    function generate_brand_palette(string $baseColor): array {
+        $base = '#'.normalize_hex_color($baseColor);
+        return [
+            '50'      => adjust_color_brightness($base, 0.85),
+            '100'     => adjust_color_brightness($base, 0.7),
+            '200'     => adjust_color_brightness($base, 0.5),
+            '300'     => adjust_color_brightness($base, 0.3),
+            '400'     => adjust_color_brightness($base, 0.15),
+            '500'     => adjust_color_brightness($base, 0.05),
+            '600'     => $base,
+            '700'     => adjust_color_brightness($base, -0.15),
+            '800'     => adjust_color_brightness($base, -0.25),
+            '900'     => adjust_color_brightness($base, -0.35),
+            'DEFAULT' => $base,
+        ];
     }
 }
 

@@ -29,6 +29,9 @@ if (!function_exists('csrf_check')) {
 require_admin();
 
 $pdo = db();
+$canEditSettings = admin_can('manage_settings');
+$canManagePayments = admin_can('manage_payment_methods');
+$canManageBuilder = admin_can('manage_builder');
 $isSuperAdmin = is_super_admin();
 
 function pm_sanitize($value, $max = 255) {
@@ -139,6 +142,7 @@ if (!in_array($tab, ['general','payments','builder'], true)) {
 }
 
 if ($action === 'reorder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+  require_admin_capability('manage_payment_methods');
   header('Content-Type: application/json; charset=utf-8');
   $payload = json_decode(file_get_contents('php://input'), true);
   $csrf = $payload['csrf'] ?? '';
@@ -163,6 +167,7 @@ if ($action === 'reorder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if ($action === 'toggle' && isset($_GET['id'])) {
   if (!csrf_check($_GET['csrf'] ?? '')) die('CSRF');
+  require_admin_capability('manage_payment_methods');
   $id = (int)$_GET['id'];
   $pdo->prepare('UPDATE payment_methods SET is_active = IF(is_active=1,0,1) WHERE id=?')->execute([$id]);
   header('Location: settings.php?tab=payments');
@@ -180,6 +185,7 @@ if ($action === 'delete' && isset($_GET['id'])) {
 
 if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  require_admin_capability('manage_payment_methods');
 
   $id = (int)($_GET['id'] ?? 0);
   $name = pm_sanitize($_POST['name'] ?? '');
@@ -263,6 +269,7 @@ if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD']
 
 if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  require_admin_capability('manage_settings');
   $errors = [];
 
   $storeName = pm_sanitize($_POST['store_name'] ?? '', 120);
@@ -512,8 +519,15 @@ $pwaShortNameCurrent = setting_get('pwa_short_name', $pwaNameCurrent);
 $pwaIcons = get_pwa_icon_paths();
 $pwaIconPreview = pwa_icon_url(192);
     ?>
-    <form class="space-y-6" method="post" enctype="multipart/form-data" action="settings.php?tab=general&action=save_general">
+    <form method="post" enctype="multipart/form-data" action="settings.php?tab=general&action=save_general">
       <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
+      <?php if (!$canEditSettings): ?>
+        <div class="alert alert-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Você não tem permissão para editar estas configurações. Os campos estão bloqueados para leitura.</span>
+        </div>
+      <?php endif; ?>
+      <fieldset class="space-y-6" <?= $canEditSettings ? '' : 'disabled'; ?>>
       <div class="grid md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Nome da loja</label>
@@ -635,8 +649,11 @@ $pwaIconPreview = pwa_icon_url(192);
         </div>
       </div>
 
+      </fieldset>
       <div class="flex justify-end gap-3">
-        <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar alterações</button>
+        <?php if ($canEditSettings): ?>
+          <button type="submit" class="btn btn-primary px-5 py-2"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar alterações</button>
+        <?php endif; ?>
         <a href="index.php" target="_blank" class="btn btn-ghost px-5 py-2"><i class="fa-solid fa-up-right-from-square mr-2"></i>Ver loja</a>
       </div>
     </form>
@@ -650,12 +667,14 @@ $pwaIconPreview = pwa_icon_url(192);
           <h2 class="text-lg font-semibold">Métodos de pagamento</h2>
           <p class="text-sm text-gray-500">Arraste para reordenar e clique para editar ou ativar/desativar.</p>
         </div>
-        <a class="btn btn-primary" href="settings.php?tab=payments&action=new"><i class="fa-solid fa-plus mr-2"></i>Novo método</a>
+        <?php if ($canManagePayments): ?>
+          <a class="btn btn-primary" href="settings.php?tab=payments&action=new"><i class="fa-solid fa-plus mr-2"></i>Novo método</a>
+        <?php endif; ?>
       </div>
       <?php if (!$methods): ?>
         <p class="text-center text-gray-500 mt-6">Nenhum método cadastrado.</p>
       <?php else: ?>
-        <ul id="pm-sortable" class="divide-y divide-gray-200 mt-4">
+        <ul id="pm-sortable" class="divide-y divide-gray-200 mt-4" data-sortable-enabled="<?= $canManagePayments ? '1' : '0'; ?>">
           <?php foreach ($methods as $pm): $settings = pm_decode_settings($pm); ?>
             <li class="flex items-center justify-between gap-4 px-4 py-3 bg-white" data-id="<?= (int)$pm['id']; ?>">
               <div class="flex items-center gap-3">
@@ -677,10 +696,14 @@ $pwaIconPreview = pwa_icon_url(192);
                 <?= !empty($pm['require_receipt']) ? '<span class="badge warn">Comprovante</span>' : ''; ?>
               </div>
               <div class="flex items-center gap-2">
-                <a class="btn btn-ghost" href="settings.php?tab=payments&action=edit&id=<?= (int)$pm['id']; ?>"><i class="fa-solid fa-pen"></i></a>
-                <a class="btn btn-ghost" href="settings.php?tab=payments&action=toggle&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>"><i class="fa-solid fa-power-off"></i></a>
+                <?php if ($canManagePayments): ?>
+                  <a class="btn btn-ghost" href="settings.php?tab=payments&action=edit&id=<?= (int)$pm['id']; ?>" title="Editar"><i class="fa-solid fa-pen"></i></a>
+                  <a class="btn btn-ghost" href="settings.php?tab=payments&action=toggle&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>" title="Ativar/Inativar"><i class="fa-solid fa-power-off"></i></a>
+                <?php else: ?>
+                  <span class="text-xs text-gray-400">Somente leitura</span>
+                <?php endif; ?>
                 <?php if ($isSuperAdmin): ?>
-                  <a class="btn btn-ghost text-red-600" href="settings.php?tab=payments&action=delete&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>" onclick="return confirm('Remover este método?')"><i class="fa-solid fa-trash"></i></a>
+                  <a class="btn btn-ghost text-red-600" href="settings.php?tab=payments&action=delete&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>" onclick="return confirm('Remover este método?')" title="Excluir"><i class="fa-solid fa-trash"></i></a>
                 <?php endif; ?>
               </div>
             </li>
@@ -699,6 +722,13 @@ $pwaIconPreview = pwa_icon_url(192);
       ?>
       <form class="space-y-4" method="post" enctype="multipart/form-data" action="settings.php?tab=payments&action=<?= $formAction; ?>">
         <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
+        <?php if (!$canManagePayments): ?>
+          <div class="alert alert-warning">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Você não possui permissão para alterar métodos de pagamento.</span>
+          </div>
+        <?php endif; ?>
+        <fieldset class="space-y-4" <?= $canManagePayments ? '' : 'disabled'; ?>>
         <div class="grid md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium mb-1">Nome</label>
@@ -853,9 +883,12 @@ $pwaIconPreview = pwa_icon_url(192);
             <div class="mt-2"><img src="<?= sanitize_html($formRow['icon_path']); ?>" alt="ícone" class="h-10"></div>
           <?php endif; ?>
         </div>
+        </fieldset>
 
         <div class="flex items-center gap-2 pt-2">
-          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar</button>
+          <?php if ($canManagePayments): ?>
+            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar</button>
+          <?php endif; ?>
           <a class="btn btn-ghost" href="settings.php?tab=payments">Cancelar</a>
         </div>
       </form>
@@ -869,14 +902,22 @@ $pwaIconPreview = pwa_icon_url(192);
         <p class="text-sm text-gray-500">Arraste blocos, edite textos e publique a nova página inicial.</p>
       </div>
       <div class="flex gap-2">
-        <button id="btn-preview" class="btn btn-ghost"><i class="fa-solid fa-eye mr-2"></i>Preview</button>
-        <button id="btn-save" class="btn btn-ghost"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar rascunho</button>
-        <button id="btn-publish" class="btn btn-primary"><i class="fa-solid fa-rocket mr-2"></i>Publicar</button>
+        <?php if ($canManageBuilder): ?>
+          <button id="btn-preview" class="btn btn-ghost"><i class="fa-solid fa-eye mr-2"></i>Preview</button>
+          <button id="btn-save" class="btn btn-ghost"><i class="fa-solid fa-floppy-disk mr-2"></i>Salvar rascunho</button>
+          <button id="btn-publish" class="btn btn-primary"><i class="fa-solid fa-rocket mr-2"></i>Publicar</button>
+        <?php else: ?>
+          <span class="text-xs text-gray-400">Somente leitura</span>
+        <?php endif; ?>
       </div>
     </div>
     <div id="builder-alert" class="hidden px-4 py-3 rounded-lg text-sm"></div>
     <div class="border border-gray-200 rounded-xl overflow-hidden">
-      <div id="gjs" style="min-height:600px;background:#f5f5f5;"></div>
+      <?php if ($canManageBuilder): ?>
+        <div id="gjs" style="min-height:600px;background:#f5f5f5;"></div>
+      <?php else: ?>
+        <div class="p-6 text-sm text-gray-500 bg-white">Você não possui permissão para editar o layout. Solicite a um administrador com acesso.</div>
+      <?php endif; ?>
     </div>
   </div>
 </div>
@@ -899,7 +940,7 @@ $pwaIconPreview = pwa_icon_url(192);
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <script>
     const list = document.getElementById("pm-sortable");
-    if (list) {
+    if (list && list.dataset.sortableEnabled === '1') {
       new Sortable(list, {
         animation: 150,
         handle: ".fa-grip-lines",
@@ -928,7 +969,7 @@ $pwaIconPreview = pwa_icon_url(192);
   </script>
 <?php endif; ?>
 
-<?php if ($tab === 'builder'): ?>
+<?php if ($tab === 'builder' && $canManageBuilder): ?>
   <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.6/dist/css/grapes.min.css">
   <script src="https://unpkg.com/grapesjs@0.21.6/dist/grapes.min.js"></script>
   <script src="https://unpkg.com/grapesjs-blocks-basic@0.1.9/dist/grapesjs-blocks-basic.min.js"></script>

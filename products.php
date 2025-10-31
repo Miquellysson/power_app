@@ -37,9 +37,14 @@ if (!function_exists('validate_email')){
 $pdo = db();
 require_admin();
 
-$isSuperAdmin = is_super_admin();
-
 $action = $_GET['action'] ?? 'list';
+$canManageProducts = admin_can('manage_products');
+$writeActions = ['new','create','edit','update','delete','destroy','bulk_destroy','import'];
+if (!$canManageProducts && in_array($action, $writeActions, true)) {
+  require_admin_capability('manage_products');
+}
+
+$isSuperAdmin = is_super_admin();
 
 /* ========= Helpers ========= */
 
@@ -134,6 +139,30 @@ function normalize_stripe_link(string $input): array {
     return [false, $url, 'Domínio não permitido. Use links buy.stripe.com ou checkout.stripe.com.'];
   }
   return [true, $url, null];
+}
+
+function parse_decimal_value($raw, ?float $default = null): ?float {
+  $value = trim((string)$raw);
+  if ($value === '') {
+    return $default;
+  }
+  $value = str_replace(["\xc2\xa0", ' '], '', $value);
+  $comma = strrpos($value, ',');
+  $dot   = strrpos($value, '.');
+  if ($comma !== false && $dot !== false) {
+    if ($comma > $dot) {
+      $value = str_replace('.', '', $value);
+      $value = str_replace(',', '.', $value);
+    } else {
+      $value = str_replace(',', '', $value);
+    }
+  } elseif ($comma !== false) {
+    $value = str_replace(',', '.', $value);
+  }
+  if (!is_numeric($value)) {
+    return null;
+  }
+  return (float)$value;
 }
 
 /** Formulário de produto (reutilizável) */
@@ -285,18 +314,17 @@ if ($action==='import') {
           $skipped++;
           continue;
         }
-        $priceRaw = str_replace(['.',','], ['','.'], $data['price'] ?? '0');
-        if (!is_numeric($priceRaw)) {
+        $price = parse_decimal_value($data['price'] ?? '', null);
+        if ($price === null) {
           $errors[] = "Linha {$line}: Preço inválido para o SKU {$sku}.";
           $skipped++;
           continue;
         }
-        $price = (float)$priceRaw;
-        $shippingRaw = str_replace(['.',','], ['','.'], $data['shipping_cost'] ?? '7');
-        if ($shippingRaw === '' || !is_numeric($shippingRaw)) {
-          $shippingRaw = '7';
+        $shippingCost = parse_decimal_value($data['shipping_cost'] ?? '', 7.0);
+        if ($shippingCost === null) {
+          $shippingCost = 7.0;
         }
-        $shippingCost = max(0, (float)$shippingRaw);
+        $shippingCost = max(0, $shippingCost);
         $stock = (int)($data['stock'] ?? 0);
         $categoryId = null;
         if (isset($data['category_id']) && $data['category_id'] !== '') {
@@ -673,6 +701,9 @@ if ($flash) {
   $icon = $flash['type'] === 'error' ? 'fa-circle-exclamation' : ($flash['type'] === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check');
   echo '<div class="'.$class.' mx-auto max-w-4xl mb-4"><i class="fa-solid '.$icon.' mr-2"></i>'.sanitize_html($flash['message']).'</div>';
 }
+if (!$canManageProducts) {
+  echo '<div class="alert alert-warning mx-auto max-w-4xl mb-4"><i class="fa-solid fa-circle-info mr-2"></i>Você possui acesso somente leitura nesta seção.</div>';
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $w = " WHERE 1=1 ";
 $p = [];
@@ -688,8 +719,10 @@ echo '<div class="card-title">Produtos</div>';
 echo '<div class="p-3 row gap items-center flex-wrap">';
 echo '  <form method="get" class="row gap search"><input type="hidden" name="action" value="list"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome ou SKU"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form>';
 echo '  <div class="flex gap-2 flex-wrap">';
-echo '    <a class="btn alt" href="products.php?action=new"><i class="fa-solid fa-plus"></i> Novo</a>';
-echo '    <a class="btn" href="products.php?action=import"><i class="fa-solid fa-file-arrow-up"></i> Importar CSV</a>';
+if ($canManageProducts) {
+  echo '    <a class="btn alt" href="products.php?action=new"><i class="fa-solid fa-plus"></i> Novo</a>';
+  echo '    <a class="btn" href="products.php?action=import"><i class="fa-solid fa-file-arrow-up"></i> Importar CSV</a>';
+}
 echo '    <a class="btn btn-ghost" href="products.php?action=export"><i class="fa-solid fa-file-arrow-down"></i> Exportar CSV</a>';
 echo '  </div>';
 echo '</div>';
@@ -725,7 +758,9 @@ foreach($st as $r){
   }
   echo '<td>'.((int)$r['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
   echo '<td class="flex gap-2 flex-wrap">';
-  echo '<a class="btn" href="products.php?action=edit&id='.(int)$r['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  if ($canManageProducts) {
+    echo '<a class="btn" href="products.php?action=edit&id='.(int)$r['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  }
   if ($isSuperAdmin) {
     echo '<a class="btn" href="products.php?action=delete&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Desativar este produto?\')"><i class="fa-solid fa-ban"></i> Desativar</a>';
     echo '<a class="btn btn-danger" href="products.php?action=destroy&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Excluir definitivamente este produto?\')"><i class="fa-solid fa-trash"></i> Excluir</a>';

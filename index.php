@@ -56,6 +56,22 @@ function store_logo_path() {
   return null;
 }
 
+function proxy_allowed_hosts(): array {
+  static $hosts = null;
+  if ($hosts !== null) {
+    return $hosts;
+  }
+  $config = cfg();
+  $raw = $config['media']['proxy_whitelist'] ?? [];
+  if (!is_array($raw)) {
+    $raw = [];
+  }
+  $hosts = array_values(array_filter(array_map(function ($h) {
+    return strtolower(trim((string)$h));
+  }, $raw)));
+  return $hosts;
+}
+
 /* === Proxy de Imagem (apenas esta adição para contornar hotlink) === */
 function proxy_img($url) {
   $url = trim((string)$url);
@@ -69,7 +85,11 @@ function proxy_img($url) {
   }
   // Se for link http/https absoluto, passa pelo proxy local img.php
   if (preg_match('~^https?://~i', $url)) {
-    return '/img.php?u=' . rawurlencode($url);
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+    if ($host !== '' && in_array($host, proxy_allowed_hosts(), true)) {
+      return '/img.php?u=' . rawurlencode($url);
+    }
+    return $url;
   }
   // Garante caminho absoluto relativo ao root da aplicação
   if ($url !== '' && $url[0] !== '/') {
@@ -332,7 +352,11 @@ function app_header() {
   echo '  <link rel="icon" type="image/png" sizes="512x512" href="'.htmlspecialchars($pwaIcon512 ?: '/assets/icons/farma-512.png', ENT_QUOTES, 'UTF-8').'">';
 
   echo '  <script src="https://cdn.tailwindcss.com"></script>';
-  echo '  <script>tailwind.config = { theme: { extend: { colors: { brand: { DEFAULT:"#2060C8", 50:"#eef4ff", 100:"#dce7ff", 200:"#b9d0ff", 300:"#96b8ff", 400:"#6d9cff", 500:"#4883f0", 600:"#2060C8", 700:"#1c54b0", 800:"#17448e", 900:"#10326a" }, accent: { 400:"#6EC1E4" }}}}};</script>';
+  $brandPalette = generate_brand_palette($themeColor);
+  $accentPalette = ['400' => adjust_color_brightness($themeColor, 0.35)];
+  $brandJson = json_encode($brandPalette, JSON_UNESCAPED_SLASHES);
+  $accentJson = json_encode($accentPalette, JSON_UNESCAPED_SLASHES);
+  echo "  <script>tailwind.config = { theme: { extend: { colors: { brand: $brandJson, accent: $accentJson }}}};</script>";
   echo '  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">';
   echo '  <script defer src="/assets/js/a2hs.js?v=3"></script>';
 

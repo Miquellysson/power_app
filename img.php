@@ -5,20 +5,19 @@
 ini_set('display_errors', 0);
 error_reporting(0);
 
+$config = require __DIR__.'/config.php';
+$allow = $config['media']['proxy_whitelist'] ?? ['base.rhemacriativa.com'];
+
 $u = $_GET['u'] ?? '';
 if (!$u) { http_response_code(400); exit('missing u'); }
 
 $u = urldecode($u);
 if (!preg_match('~^https?://~i', $u)) { http_response_code(400); exit('bad url'); }
 
-// WHITELIST: ajuste se precisar puxar de mais domínios
-$allow = [
-  'base.rhemacriativa.com',
-];
 $host = parse_url($u, PHP_URL_HOST);
 if (!$host || !in_array($host, $allow, true)) {
-  http_response_code(403);
-  exit('host not allowed');
+  header('Location: '.$u, true, 302);
+  exit;
 }
 
 // Baixa via cURL

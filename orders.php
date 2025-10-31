@@ -32,6 +32,10 @@ $pdo = db();
 require_admin();
 
 $action = $_GET['action'] ?? 'list';
+$canManageOrders = admin_can('manage_orders');
+if ($action === 'update_status' && !$canManageOrders) {
+  require_admin_capability('manage_orders');
+}
 
 function status_badge($s){
   if ($s==='paid') return '<span class="badge ok">Pago</span>';
@@ -72,7 +76,11 @@ if ($action==='view') {
   echo '<div class="mb-2">Pagamento: <strong>'.sanitize_html($o['payment_method']).'</strong></div>';
   if (!empty($o['payment_ref'])) echo '<div class="mb-2">Ref: <a class="text-blue-600 underline" href="'.sanitize_html($o['payment_ref']).'" target="_blank">abrir</a></div>';
   echo '<div class="mb-2">Status: '.status_badge($o['status']).'</div>';
-  echo '<form class="mt-3" method="post" action="orders.php?action=update_status&id='.$id.'"><input type="hidden" name="csrf" value="'.csrf_token().'"><select class="select" name="status" required><option value="pending" '.($o['status']==='pending'?'selected':'').'>Pendente</option><option value="paid" '.($o['status']==='paid'?'selected':'').'>Pago</option><option value="shipped" '.($o['status']==='shipped'?'selected':'').'>Enviado</option><option value="canceled" '.($o['status']==='canceled'?'selected':'').'>Cancelado</option></select><button class="btn alt ml-2" type="submit"><i class="fa-solid fa-rotate"></i> Atualizar</button></form>';
+  if ($canManageOrders) {
+    echo '<form class="mt-3" method="post" action="orders.php?action=update_status&id='.$id.'"><input type="hidden" name="csrf" value="'.csrf_token().'"><select class="select" name="status" required><option value="pending" '.($o['status']==='pending'?'selected':'').'>Pendente</option><option value="paid" '.($o['status']==='paid'?'selected':'').'>Pago</option><option value="shipped" '.($o['status']==='shipped'?'selected':'').'>Enviado</option><option value="canceled" '.($o['status']==='canceled'?'selected':'').'>Cancelado</option></select><button class="btn alt ml-2" type="submit"><i class="fa-solid fa-rotate"></i> Atualizar</button></form>';
+  } else {
+    echo '<div class="text-xs text-gray-500">Você não tem permissão para alterar o status.</div>';
+  }
   if (!empty($o['zelle_receipt'])){
     echo '<div class="mt-3"><a class="btn" href="'.sanitize_html($o['zelle_receipt']).'" target="_blank"><i class="fa-solid fa-file"></i> Ver comprovante</a></div>';
   }
@@ -99,6 +107,9 @@ if ($action==='update_status' && $_SERVER['REQUEST_METHOD']==='POST') {
 
 // listagem
 admin_header('Pedidos');
+if (!$canManageOrders) {
+  echo '<div class="alert alert-warning mx-auto max-w-4xl mb-4"><i class="fa-solid fa-circle-info mr-2"></i>Alterações de status disponíveis apenas para administradores autorizados.</div>';
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $w=' WHERE 1=1 '; $p=[];
 if ($q!==''){

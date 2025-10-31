@@ -8,15 +8,36 @@ if (!function_exists('cfg')) { function cfg(){ return []; } }
 
 function admin_header($title='Admin'){
   $store = setting_get('store_name', (cfg()['store']['name'] ?? 'Farma Fácil'));
+  $themeColor = setting_get('theme_color', '#2060C8');
+  $defaultPalette = [
+      'DEFAULT' => '#2060C8',
+      '50' => '#EEF4FF',
+      '100' => '#DCE7FF',
+      '200' => '#B9D0FF',
+      '300' => '#96B8FF',
+      '400' => '#6D9CFF',
+      '500' => '#4883F0',
+      '600' => '#2060C8',
+      '700' => '#1C54B0',
+      '800' => '#17448E',
+      '900' => '#10326A',
+  ];
+  $brandPalette = function_exists('generate_brand_palette') ? generate_brand_palette($themeColor) : $defaultPalette;
+  $brandPalette = array_merge($defaultPalette, $brandPalette);
+  $accentColor = function_exists('adjust_color_brightness') ? adjust_color_brightness($themeColor, 0.35) : '#4F88FF';
+  $tailwindBrandJson = json_encode($brandPalette, JSON_UNESCAPED_SLASHES);
+  $accentPaletteJson = json_encode(['400' => $accentColor], JSON_UNESCAPED_SLASHES);
+  $adminThemeColor = $brandPalette['600'] ?? $brandPalette['DEFAULT'];
   echo '<!doctype html><html lang="pt-br"><head><meta charset="utf-8">';
   echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
   echo '<script src="https://cdn.tailwindcss.com"></script>';
-  echo '<script>tailwind.config={theme:{extend:{colors:{brand:{DEFAULT:"#2060C8"}}}}};</script>';
+  echo "<script>tailwind.config={theme:{extend:{colors:{brand:$tailwindBrandJson,accent:$accentPaletteJson}}}};</script>";
   echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">';
   $css = function_exists('asset_url') ? asset_url('assets/admin.css') : 'assets/admin.css';
   echo '<link rel="stylesheet" href="'.$css.'">';
   echo '<title>'.sanitize_html($title).' — Admin</title>';
-  echo '<meta name="theme-color" content="#2060C8">';
+  echo '<meta name="theme-color" content="'.sanitize_html($adminThemeColor).'">';
+  echo '<style>:root{--brand:'.$brandPalette['DEFAULT'].';--brand-50:'.$brandPalette['50'].';--brand-600:'.$brandPalette['600'].';--brand-700:'.$brandPalette['700'].';--accent:'.$accentColor.';}</style>';
   echo '</head><body>';
   // Topbar
   echo '<header class="admin-top"><div class="wrap">';

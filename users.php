@@ -30,6 +30,7 @@ if (!function_exists('validate_email')){
 }
 $pdo = db();
 require_admin();
+require_admin_capability('manage_users');
 
 $rolesMap = [
   'super_admin' => 'Super Admin',

@@ -27,6 +27,11 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_admin();
+if (!admin_can('manage_builder')) {
+  http_response_code(403);
+  echo json_encode(['ok' => false, 'error' => 'forbidden']);
+  exit;
+}
 
 $pdo = db();
 try {
