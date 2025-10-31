@@ -323,6 +323,127 @@ if (!function_exists('get_logo_path')) {
     }
 }
 
+if (!function_exists('save_pwa_icon_upload')) {
+    function save_pwa_icon_upload(array $file) {
+        $validation = validate_file_upload($file, ['image/png'], 2 * 1024 * 1024);
+        if (!$validation['success']) {
+            return ['success' => false, 'message' => $validation['message'] ?? 'Arquivo inválido'];
+        }
+
+        $dir = __DIR__ . '/../storage/pwa';
+        @mkdir($dir, 0775, true);
+
+        $data = @file_get_contents($file['tmp_name']);
+        if ($data === false) {
+            return ['success' => false, 'message' => 'Falha ao ler o arquivo enviado.'];
+        }
+
+        $targets = [
+            512 => $dir . '/icon-512.png',
+            192 => $dir . '/icon-192.png',
+            180 => $dir . '/icon-180.png',
+        ];
+
+        $generated = [];
+        $canResize = function_exists('imagecreatefromstring') && function_exists('imagecreatetruecolor') && function_exists('imagepng');
+
+        if ($canResize) {
+            $src = @imagecreatefromstring($data);
+            if ($src !== false) {
+                $srcWidth  = imagesx($src);
+                $srcHeight = imagesy($src);
+                $square    = min($srcWidth, $srcHeight);
+                foreach ($targets as $size => $path) {
+                    $canvas = imagecreatetruecolor($size, $size);
+                    imagealphablending($canvas, false);
+                    imagesavealpha($canvas, true);
+                    $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+                    imagefilledrectangle($canvas, 0, 0, $size, $size, $transparent);
+                    imagecopyresampled(
+                        $canvas,
+                        $src,
+                        0, 0,
+                        ($srcWidth > $srcHeight) ? (int)(($srcWidth - $square) / 2) : 0,
+                        ($srcHeight > $srcWidth) ? (int)(($srcHeight - $square) / 2) : 0,
+                        $size, $size,
+                        $square, $square
+                    );
+                    if (!@imagepng($canvas, $path, 9)) {
+                        imagedestroy($canvas);
+                        imagedestroy($src);
+                        $canResize = false;
+                        break;
+                    }
+                    $generated[] = $path;
+                    imagedestroy($canvas);
+                }
+                imagedestroy($src);
+            } else {
+                $canResize = false;
+            }
+        }
+
+        if (!$canResize) {
+            $target512 = $targets[512];
+            if (!@move_uploaded_file($file['tmp_name'], $target512)) {
+                return ['success' => false, 'message' => 'Falha ao salvar ícone do app.'];
+            }
+            @copy($target512, $targets[192]);
+            @copy($target512, $targets[180]);
+        }
+
+        setting_set('pwa_icon_last_update', (string)time());
+
+        return ['success' => true];
+    }
+}
+
+if (!function_exists('get_pwa_icon_paths')) {
+    function get_pwa_icon_paths(): array {
+        $defaults = [
+            512 => 'assets/icons/farma-512.png',
+        192 => 'assets/icons/farma-192.png',
+        180 => 'assets/icons/farma-192.png',
+        ];
+        $paths = [];
+        foreach ($defaults as $size => $fallback) {
+            $custom = 'storage/pwa/icon-' . $size . '.png';
+            $rel = $fallback;
+            if (file_exists(__DIR__ . '/../' . $custom)) {
+                $rel = $custom;
+            }
+            $paths[$size] = [
+                'relative' => $rel,
+                'absolute' => __DIR__ . '/../' . $rel
+            ];
+        }
+        return $paths;
+    }
+}
+
+if (!function_exists('get_pwa_icon_path')) {
+    function get_pwa_icon_path(int $size = 512): string {
+        $icons = get_pwa_icon_paths();
+        return $icons[$size]['relative'] ?? '';
+    }
+}
+
+if (!function_exists('pwa_icon_url')) {
+    function pwa_icon_url(int $size = 512): string {
+        $icons = get_pwa_icon_paths();
+        if (!isset($icons[$size])) {
+            return '';
+        }
+        $rel = $icons[$size]['relative'];
+        $abs = $icons[$size]['absolute'];
+        $url = '/' . ltrim($rel, '/');
+        if (file_exists($abs)) {
+            $url .= '?v=' . filemtime($abs);
+        }
+        return $url;
+    }
+}
+
 /* =========================================================================
    Helpers de formatação
    ========================================================================= */

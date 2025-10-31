@@ -269,6 +269,18 @@ function app_header() {
 
   $lang = $d['_lang'] ?? 'pt';
   $logo = store_logo_path();
+  $logoUrl = $logo;
+  if ($logo) {
+    $absLogo = __DIR__ . '/' . ltrim($logo, '/');
+    if (file_exists($absLogo)) {
+      $logoUrl .= '?v='.filemtime($absLogo);
+    }
+  }
+  $metaTitle = setting_get('store_meta_title', (($cfg['store']['name'] ?? 'Farma Fácil').' | Loja'));
+  $pwaName = setting_get('pwa_name', $cfg['store']['name'] ?? 'Farma Fácil');
+  $pwaShortName = setting_get('pwa_short_name', $pwaName);
+  $pwaIconApple = pwa_icon_url(180);
+  $pwaIcon512 = pwa_icon_url(512);
 
   // Count carrinho
   $cart_count = 0;
@@ -278,17 +290,20 @@ function app_header() {
 
   echo '<!doctype html><html lang="'.htmlspecialchars($lang).'"><head>';
   echo '  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
-  echo '  <title>'.htmlspecialchars($d['title'] ?? 'Farma Fácil').' | Loja</title>';
+  echo '  <title>'.htmlspecialchars($metaTitle, ENT_QUOTES, 'UTF-8').'</title>';
   echo '  <meta name="description" content="FarmaFixed — sua farmácia online com experiência de app: rápida, responsiva, segura.">';
-  echo '  <link rel="manifest" href="/manifest.webmanifest">';
+  echo '  <link rel="manifest" href="/manifest.php">';
   $themeColor = setting_get('theme_color', '#2060C8');
   echo '  <meta name="theme-color" content="'.htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8').'">';
+  echo '  <meta name="application-name" content="'.htmlspecialchars($pwaShortName, ENT_QUOTES, 'UTF-8').'">';
 
   // ====== iOS PWA (suporte ao Add to Home Screen) ======
-  echo '  <link rel="apple-touch-icon" href="/assets/icons/farma-180.png">';
+  $appleIconHref = $pwaIconApple ?: '/assets/icons/farma-192.png';
+  echo '  <link rel="apple-touch-icon" href="'.htmlspecialchars($appleIconHref, ENT_QUOTES, 'UTF-8').'">';
   echo '  <meta name="apple-mobile-web-app-capable" content="yes">';
   echo '  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">';
-  echo '  <meta name="apple-mobile-web-app-title" content="Farma Fácil">';
+  echo '  <meta name="apple-mobile-web-app-title" content="'.htmlspecialchars($pwaName, ENT_QUOTES, 'UTF-8').'">';
+  echo '  <link rel="icon" type="image/png" sizes="512x512" href="'.htmlspecialchars($pwaIcon512 ?: '/assets/icons/farma-512.png', ENT_QUOTES, 'UTF-8').'">';
 
   echo '  <script src="https://cdn.tailwindcss.com"></script>';
   echo '  <script>tailwind.config = { theme: { extend: { colors: { brand: { DEFAULT:"#2060C8", 50:"#eef4ff", 100:"#dce7ff", 200:"#b9d0ff", 300:"#96b8ff", 400:"#6d9cff", 500:"#4883f0", 600:"#2060C8", 700:"#1c54b0", 800:"#17448e", 900:"#10326a" }, accent: { 400:"#6EC1E4" }}}}};</script>';
@@ -318,10 +333,10 @@ function app_header() {
   echo '<header class="sticky top-0 z-40 border-b bg-white/90 blur-bg">';
   echo '  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">';
   echo '    <a href="?route=home" class="flex items-center gap-3">';
-  if ($logo) {
-    echo '      <img src="'.htmlspecialchars($logo).'" class="w-14 h-14 rounded-xl object-cover" alt="logo">';
+  if ($logoUrl) {
+    echo '      <img src="'.htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8').'" class="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-sm" alt="logo">';
   } else {
-    echo '      <div class="w-14 h-14 rounded-xl bg-brand-700 text-white grid place-items-center text-xl"><i class="fas fa-pills"></i></div>';
+    echo '      <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white grid place-items-center text-2xl"><i class="fas fa-pills"></i></div>';
   }
   echo '      <div>';
   $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
@@ -333,7 +348,7 @@ function app_header() {
 
   echo '    <div class="flex items-center gap-2">';
   // Botão A2HS (Add to Home Screen)
-  echo '      <button id="btnA2HS" class="a2hs-btn hidden px-3 py-2 rounded-lg text-brand-700 bg-brand-50 hover:bg-brand-100 text-sm"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Adicionar</button>';
+  echo '      <button id="btnA2HS" class="a2hs-btn hidden px-3 py-2 rounded-lg text-brand-600 bg-brand-50 hover:bg-brand-100 text-sm"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Adicionar</button>';
 
   // Troca de idioma
   echo '      <div class="relative">';
@@ -347,14 +362,14 @@ function app_header() {
   echo '      </div>';
 
   // Minha conta
-  echo '      <a href="?route=account" class="px-3 py-2 rounded-lg border border-brand-200 text-brand-700 bg-white hover:bg-brand-50 flex items-center gap-2 text-sm">';
+  echo '      <a href="?route=account" class="px-3 py-2 rounded-lg border border-brand-200 text-brand-600 bg-white hover:bg-brand-50 flex items-center gap-2 text-sm">';
   echo '        <i class="fa-solid fa-user-circle"></i>';
   echo '        <span class="hidden sm:inline">Minha conta</span>';
   echo '      </a>';
 
   // Carrinho
   echo '      <a href="?route=cart" class="relative">';
-  echo '        <div class="btn flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-700 text-white hover:bg-brand-800">';
+  echo '        <div class="btn flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">';
   echo '          <i class="fas fa-shopping-cart"></i>';
   echo '          <span class="hidden sm:inline">'.htmlspecialchars($d['cart'] ?? 'Carrinho').'</span>';
   if ($cart_count > 0) {
@@ -420,7 +435,7 @@ function app_footer() {
       $url .= '?text='.rawurlencode($message);
     }
     $urlAttr = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
-    echo '<div class="fixed z-50 bottom-5 right-4 sm:bottom-8 sm:right-6">';
+    echo '<div class="fixed z-50 bottom-5 right-4 sm:bottom-8 sm:right-6 whatsapp-button">';
     echo '  <a href="'.$urlAttr.'" target="_blank" rel="noopener noreferrer" class="group flex items-center gap-3 bg-[#25D366] text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-1">';
     echo '    <span class="text-2xl"><i class="fa-brands fa-whatsapp"></i></span>';
     echo '    <span class="flex flex-col leading-tight">';
@@ -436,7 +451,7 @@ function app_footer() {
   /* === Banner Add To Home Screen (A2HS) — Android + iOS === */
   echo '<div id="a2hsBanner" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-xl px-4 py-3 flex items-center gap-3 border hidden z-50">';
   echo '  <span class="text-sm">📲 Instale o app para uma experiência melhor</span>';
-  echo '  <button id="a2hsInstall" class="px-3 py-2 rounded-lg bg-brand-700 text-white text-sm">Instalar</button>';
+  echo '  <button id="a2hsInstall" class="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm hover:bg-brand-700">Instalar</button>';
   echo '  <button id="a2hsClose" class="ml-1 text-gray-500 text-lg leading-none">&times;</button>';
   echo '</div>';
 
@@ -470,7 +485,7 @@ function app_footer() {
       overlay.innerHTML = `
         <div class="max-w-sm w-full bg-white rounded-2xl shadow-xl p-5">
           <div class="flex items-start gap-3">
-            <div class="w-10 h-10 rounded-lg bg-brand-700 text-white grid place-items-center">
+            <div class="w-10 h-10 rounded-lg bg-brand-600 text-white grid place-items-center">
               <i class="fa-solid fa-mobile-screen-button"></i>
             </div>
             <div class="flex-1">
@@ -671,28 +686,72 @@ if ($route === 'home') {
     echo '  <form method="get" class="bg-white rounded-2xl shadow px-4 py-4 flex flex-col lg:flex-row gap-3 items-stretch">';
     echo '    <input type="hidden" name="route" value="home">';
     echo '    <input class="flex-1 rounded-xl px-4 py-3 border border-gray-200" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
-    echo '    <button class="px-5 py-3 rounded-xl bg-brand-700 text-white font-semibold hover:bg-brand-800"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
+    echo '    <button class="px-5 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
     echo '  </form>';
     echo '</section>';
   } else {
-    $heroClasses = 'text-white py-10 mb-8';
+    $heroClasses = 'text-white py-12 md:py-16 mb-10';
     $heroStyleAttr = '';
-    if ($heroBackground === 'solid') {
-      $heroStyleAttr = ' style=\"background: '.htmlspecialchars($heroAccentColor, ENT_QUOTES, 'UTF-8').';\"';
+    if ($heroBackground === 'gradient') {
+      $heroStyleAttr = ' style="background: linear-gradient(135deg, '.htmlspecialchars($heroAccentColor, ENT_QUOTES, 'UTF-8').', rgba(32,96,200,0.95));"';
+    } elseif ($heroBackground === 'solid') {
+      $heroStyleAttr = ' style="background: '.htmlspecialchars($heroAccentColor, ENT_QUOTES, 'UTF-8').';"';
     } elseif ($heroBackground === 'image' && $heroBackgroundImage !== '') {
-      $heroStyleAttr = ' style=\"background:url(\''.htmlspecialchars($heroBackgroundImage, ENT_QUOTES, 'UTF-8').'\') center / cover no-repeat;\"';
-    } else {
-      $heroClasses = 'bg-gradient-to-br from-brand-700 to-brand-500 text-white py-10 mb-8';
+      $heroStyleAttr = ' style="background:url('.htmlspecialchars($heroBackgroundImage, ENT_QUOTES, 'UTF-8').') center / cover no-repeat;"';
     }
+    $heroHighlights = [
+      [
+        'icon' => 'fa-shield-halved',
+        'title' => 'Produtos Originais',
+        'desc' => 'Nossos produtos são 100% originais e testados em laboratório.'
+      ],
+      [
+        'icon' => 'fa-award',
+        'title' => 'Qualidade e Segurança',
+        'desc' => 'Compre com quem se preocupa com a qualidade dos produtos.'
+      ],
+      [
+        'icon' => 'fa-plane-departure',
+        'title' => 'Enviamos para todo EUA',
+        'desc' => 'Entrega rápida e segura em todo o território norte-americano.'
+      ],
+      [
+        'icon' => 'fa-lock',
+        'title' => 'Site 100% Seguro',
+        'desc' => 'Pagamentos protegidos pela nossa rede de segurança privada.'
+      ],
+    ];
     echo '<section class="'.$heroClasses.'"'.$heroStyleAttr.'>';
-    echo '  <div class="max-w-7xl mx-auto px-4 text-center">';
-    echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">'.$heroTitleHtml.'</h2>';
-    echo '    <p class="text-white/90 text-lg mb-6">'.$heroSubtitleHtml.'</p>';
-    echo '    <form method="get" class="max-w-2xl mx-auto flex gap-2">';
-    echo '      <input type="hidden" name="route" value="home">';
-    echo '      <input class="flex-1 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-white/30" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
-    echo '      <button class="px-5 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
-    echo '    </form>';
+    echo '  <div class="max-w-7xl mx-auto px-4 hero-section">';
+    echo '    <div class="grid lg:grid-cols-[1.1fr,0.9fr] gap-10 items-center">';
+    echo '      <div class="text-left space-y-6">';
+    echo '        <div>';
+    echo '          <h2 class="text-3xl md:text-5xl font-bold mb-3 leading-tight">'.$heroTitleHtml.'</h2>';
+    echo '          <p class="text-white/90 text-lg md:text-xl">'.$heroSubtitleHtml.'</p>';
+    echo '        </div>';
+    echo '        <form method="get" class="flex flex-col sm:flex-row gap-3 bg-white/10 p-2 rounded-2xl backdrop-blur">';
+    echo '          <input type="hidden" name="route" value="home">';
+    echo '          <input class="flex-1 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-brand-200" name="q" value="'.htmlspecialchars($q).'" placeholder="'.htmlspecialchars($d['search'] ?? 'Buscar').'...">';
+    echo '          <button class="px-5 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50 cta-button transition"><i class="fa-solid fa-search mr-2"></i>'.htmlspecialchars($d['search'] ?? 'Buscar').'</button>';
+    echo '        </form>';
+    echo '        <div class="flex flex-wrap items-center gap-4 text-white/80 text-sm">';
+    echo '          <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-white"></i> Atendimento humano rápido</span>';
+    echo '          <span class="flex items-center gap-2"><i class="fa-solid fa-medal text-white"></i> Produtos verificados</span>';
+    echo '        </div>';
+    echo '      </div>';
+    echo '      <div class="grid sm:grid-cols-2 gap-4">';
+    foreach ($heroHighlights as $feature) {
+      $title = htmlspecialchars($feature['title'], ENT_QUOTES, 'UTF-8');
+      $desc  = htmlspecialchars($feature['desc'], ENT_QUOTES, 'UTF-8');
+      $icon  = htmlspecialchars($feature['icon'], ENT_QUOTES, 'UTF-8');
+      echo '        <div class="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-lg backdrop-blur flex flex-col gap-2">';
+      echo '          <span class="w-10 h-10 rounded-full bg-white/20 text-white grid place-items-center text-lg"><i class="fa-solid '.$icon.'"></i></span>';
+      echo '          <div class="font-semibold">'.$title.'</div>';
+      echo '          <p class="text-sm text-white/80 leading-relaxed">'.$desc.'</p>';
+      echo '        </div>';
+    }
+    echo '      </div>';
+    echo '    </div>';
     echo '  </div>';
     echo '</section>';
   }
@@ -700,16 +759,17 @@ if ($route === 'home') {
   // Filtros de categoria (chips)
   echo '<section class="max-w-7xl mx-auto px-4">';
   echo '  <div class="flex items-center gap-3 flex-wrap mb-6">';
-  echo '    <button onclick="window.location.href=\'?route=home\'" class="chip px-4 py-2 rounded-full '.($category_id===0?'bg-brand-700 text-white border-brand-700':'bg-white').'">Todas</button>';
+  echo '    <button onclick="window.location.href=\'?route=home\'" class="chip px-4 py-2 rounded-full '.($category_id===0?'bg-brand-600 text-white border-brand-600':'bg-white').'">Todas</button>';
   foreach ($categories as $cat) {
     $active = ($category_id === (int)$cat['id']);
-    echo '    <button onclick="window.location.href=\'?route=home&category='.(int)$cat['id'].'\'" class="chip px-4 py-2 rounded-full '.($active?'bg-brand-700 text-white border-brand-700':'bg-white').'">'.htmlspecialchars($cat['name']).'</button>';
+    echo '    <button onclick="window.location.href=\'?route=home&category='.(int)$cat['id'].'\'" class="chip px-4 py-2 rounded-full '.($active?'bg-brand-600 text-white border-brand-600':'bg-white').'">'.htmlspecialchars($cat['name']).'</button>';
   }
   echo '  </div>';
   echo '</section>';
 
   // Sessões destaque antes da listagem
-  $ctaImage = proxy_img('https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03-1.jpeg');
+  $ctaImagePrimary = proxy_img('https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03-1.jpeg');
+  $ctaImageSecondary = proxy_img('https://store.nestgeneralservices.company/wp-content/uploads/2025/08/WhatsApp-Image-2025-08-25-at-18.01.03.jpeg');
   echo '<section class="max-w-7xl mx-auto px-4 mb-10">';
   echo '  <div class="rounded-3xl bg-gradient-to-r from-[#2060C8] to-[#3A7BFF] text-white p-8 shadow-lg">';
   echo '    <div class="grid gap-6 md:grid-cols-3 md:gap-8 items-start">';
@@ -755,10 +815,19 @@ if ($route === 'home') {
   echo '</section>';
 
   echo '<section class="max-w-7xl mx-auto px-4 mb-12">';
-  echo '  <div class="rounded-3xl overflow-hidden shadow-lg">';
-  echo '    <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer">';
-  echo '      <img src="'.htmlspecialchars($ctaImage).'" alt="Fale com um especialista" class="w-full h-auto object-cover">';
-  echo '    </a>';
+  echo '  <div class="rounded-3xl bg-white shadow-lg overflow-hidden">';
+  echo '    <div class="grid gap-0 md:grid-cols-2">';
+  echo '      <div class="border-b md:border-b-0 md:border-r border-gray-200">';
+  echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
+  echo '          <img src="'.htmlspecialchars($ctaImagePrimary, ENT_QUOTES, 'UTF-8').'" alt="Fale com um especialista" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
+  echo '        </a>';
+  echo '      </div>';
+  echo '      <div>';
+  echo '        <a href="https://store.nestgeneralservices.company/contato/" target="_blank" rel="noopener noreferrer" class="block group">';
+  echo '          <img src="'.htmlspecialchars($ctaImageSecondary, ENT_QUOTES, 'UTF-8').'" alt="Atendimento especializado" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]">';
+  echo '        </a>';
+  echo '      </div>';
+  echo '    </div>';
   echo '  </div>';
   echo '</section>';
 
@@ -794,7 +863,7 @@ if ($route === 'home') {
     echo '<div class="text-center py-16">';
     echo '  <i class="fa-solid fa-magnifying-glass text-5xl text-gray-300 mb-4"></i>';
     echo '  <div class="text-lg text-gray-600">Nenhum produto encontrado</div>';
-    echo '  <a href="?route=home" class="inline-block mt-6 px-6 py-3 rounded-lg bg-brand-700 text-white hover:bg-brand-800">Voltar</a>';
+    echo '  <a href="?route=home" class="inline-block mt-6 px-6 py-3 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Voltar</a>';
     echo '</div>';
   } else {
     echo '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mobile-grid-products">';
@@ -822,7 +891,7 @@ if ($route === 'home') {
       echo '    </div>';
       echo '    <div class="pt-2">';
       if ($in_stock) {
-        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-700 text-white hover:bg-brand-800 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name']).'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Adicionar</button>';
+        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-600 text-white hover:bg-brand-700 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name']).'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Adicionar</button>';
       } else {
         echo '    <button class="w-full px-4 py-3 rounded-xl bg-gray-300 text-gray-600 cursor-not-allowed"><i class="fa-solid fa-ban mr-2"></i>Indisponível</button>';
       }
@@ -1054,7 +1123,7 @@ if ($route === 'cart') {
     echo '<div class="text-center py-16">';
     echo '  <i class="fa-solid fa-cart-shopping text-6xl text-gray-300 mb-4"></i>';
     echo '  <div class="text-gray-600 mb-6">Seu carrinho está vazio</div>';
-    echo '  <a href="?route=home" class="px-6 py-3 rounded-lg bg-brand-700 text-white hover:bg-brand-800">Continuar comprando</a>';
+    echo '  <a href="?route=home" class="px-6 py-3 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Continuar comprando</a>';
     echo '</div>';
   } else {
     echo '<div class="bg-white rounded-2xl shadow overflow-hidden">';
@@ -1085,7 +1154,7 @@ if ($route === 'cart') {
     echo '  </div>';
     echo '  <div class="p-4 flex gap-3">';
     echo '    <a href="?route=home" class="px-5 py-3 rounded-lg border">Continuar comprando</a>';
-    echo '    <a href="?route=checkout" class="flex-1 px-5 py-3 rounded-lg bg-brand-700 text-white text-center hover:bg-brand-800">'.htmlspecialchars($d["checkout"] ?? "Finalizar Compra").'</a>';
+    echo '    <a href="?route=checkout" class="flex-1 px-5 py-3 rounded-lg bg-brand-600 text-white text-center hover:bg-brand-700">'.htmlspecialchars($d["checkout"] ?? "Finalizar Compra").'</a>';
     echo '  </div>';
     echo '</div>';
   }
@@ -1133,6 +1202,8 @@ if ($route === 'checkout') {
   if (empty($cart)) { header('Location: ?route=cart'); exit; }
 
   app_header();
+  $checkoutError = $_SESSION['checkout_error'] ?? null;
+  unset($_SESSION['checkout_error']);
 
   $pdo = db();
   $ids = array_keys($cart);
@@ -1152,7 +1223,10 @@ if ($route === 'checkout') {
   $paymentMethods = load_payment_methods($pdo, $cfg);
 
   echo '<section class="max-w-6xl mx-auto px-4 py-8">';
-  echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-lock mr-2 text-brand-700"></i>'.htmlspecialchars($d['checkout'] ?? 'Finalizar Compra').'</h2>';
+  if ($checkoutError) {
+    echo '  <div class="mb-4 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-3"><i class="fa-solid fa-triangle-exclamation mt-1"></i><span>'.htmlspecialchars($checkoutError, ENT_QUOTES, 'UTF-8').'</span></div>';
+  }
+  echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-lock mr-2 text-brand-600"></i>'.htmlspecialchars($d['checkout'] ?? 'Finalizar Compra').'</h2>';
   echo '  <form method="post" action="?route=place_order" enctype="multipart/form-data" class="grid lg:grid-cols-2 gap-6">';
   echo '    <input type="hidden" name="csrf" value="'.csrf_token().'">';
 
@@ -1232,7 +1306,7 @@ echo '      </div>';
   // Coluna 2 — Resumo
   echo '    <div>';
   echo '      <div class="bg-white rounded-2xl shadow p-5 sticky top-24">';
-  echo '        <div class="font-semibold mb-3"><i class="fa-solid fa-clipboard-list mr-2 text-brand-700"></i>'.htmlspecialchars($d["order_details"] ?? "Resumo do Pedido").'</div>';
+  echo '        <div class="font-semibold mb-3"><i class="fa-solid fa-clipboard-list mr-2 text-brand-600"></i>'.htmlspecialchars($d["order_details"] ?? "Resumo do Pedido").'</div>';
   foreach ($items as $it) {
     echo '        <div class="flex items-center justify-between py-2 border-b">';
     echo '          <div class="text-sm"><div class="font-medium">'.htmlspecialchars($it['name']).'</div><div class="text-gray-500">Qtd: '.(int)$it['qty'].'</div></div>';
@@ -1242,9 +1316,9 @@ echo '      </div>';
   echo '        <div class="mt-4 space-y-1">';
   echo '          <div class="flex justify-between"><span>'.htmlspecialchars($d["subtotal"] ?? "Subtotal").'</span><span>$ '.number_format($subtotal,2,',','.').'</span></div>';
   echo '          <div class="flex justify-between text-green-600"><span>Frete</span><span>$ 7.00</span></div>';
-  echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-700">$ '.number_format($total,2,',','.').'</span></div>';
+  echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-600">$ '.number_format($total,2,',','.').'</span></div>';
   echo '        </div>';
-  echo '        <button type="submit" class="w-full mt-5 px-6 py-4 rounded-xl bg-brand-700 text-white hover:bg-brand-800 font-semibold"><i class="fa-solid fa-lock mr-2"></i>'.htmlspecialchars($d["place_order"] ?? "Finalizar Pedido").'</button>';
+  echo '        <button type="submit" class="w-full mt-5 px-6 py-4 rounded-xl bg-brand-600 text-white hover:bg-brand-700 font-semibold"><i class="fa-solid fa-lock mr-2"></i>'.htmlspecialchars($d["place_order"] ?? "Finalizar Pedido").'</button>';
   $securityBadges = [
     [
       'icon' => 'fa-shield-check',
@@ -1273,7 +1347,7 @@ echo '      </div>';
     $title = htmlspecialchars($badge['title'], ENT_QUOTES, 'UTF-8');
     $desc = htmlspecialchars($badge['desc'], ENT_QUOTES, 'UTF-8');
     echo '          <div class="flex items-start gap-3 p-3 rounded-xl border border-brand-100 bg-brand-50/40">';
-    echo '            <div class="w-10 h-10 rounded-full bg-brand-700 text-white grid place-items-center text-lg"><i class="fa-solid '.$icon.'"></i></div>';
+    echo '            <div class="w-10 h-10 rounded-full bg-brand-600 text-white grid place-items-center text-lg"><i class="fa-solid '.$icon.'"></i></div>';
     echo '            <div>';
     echo '              <div class="font-semibold text-sm">'.$title.'</div>';
     echo '              <p class="text-xs text-gray-600 leading-snug">'.$desc.'</p>';
@@ -1439,6 +1513,14 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       break;
   }
 
+  if ($methodType === 'square') {
+    if ($squareRedirectUrl === null || $squareRedirectUrl === '' || $squareWarning) {
+      $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link Square para estes produtos. Escolha outra forma de pagamento.';
+      header('Location: ?route=checkout');
+      exit;
+    }
+  }
+
   try {
     $pdo->beginTransaction();
     // cliente
@@ -1561,22 +1643,22 @@ if ($route === 'order_success') {
     $safeSquare = htmlspecialchars($squareRedirectSession, ENT_QUOTES, "UTF-8");
     $squareJs = json_encode($squareRedirectSession, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
     echo '    <div class="mt-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
-    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Abrimos o checkout Square em uma nova aba. Se não aparecer, <a class="underline" href="'.$safeSquare.'" target="_blank" rel="noopener">clique aqui para pagar</a>.';
+    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Redirecionando para o pagamento Square... Caso não avance automaticamente, <a class="underline" href="'.$safeSquare.'">clique aqui</a>.';
     echo '    </div>';
     echo '    <script>
       window.addEventListener("load", function(){
         const key = "square_redirect_'.$order_id.'";
         if (!window.sessionStorage.getItem(key)) {
-          window.open('.$squareJs.', "_blank");
           window.sessionStorage.setItem(key, "1");
+          window.location.href = '.$squareJs.';
         }
       });
     </script>';
   }
   if ($track_code !== '') {
-    echo '    <p class="mb-6">Acompanhe seu pedido: <a class="text-brand-700 underline" href="?route=track&code='.htmlspecialchars($track_code, ENT_QUOTES, "UTF-8").'">clique aqui</a></p>';
+    echo '    <p class="mb-6">Acompanhe seu pedido: <a class="text-brand-600 underline" href="?route=track&code='.htmlspecialchars($track_code, ENT_QUOTES, "UTF-8").'">clique aqui</a></p>';
   }
-  echo '    <a href="?route=home" class="px-6 py-3 rounded-lg bg-brand-700 text-white hover:bg-brand-800">Voltar à loja</a>';
+  echo '    <a href="?route=home" class="px-6 py-3 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Voltar à loja</a>';
   echo '  </div>';
   echo '</section>';
 

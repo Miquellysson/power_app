@@ -1,5 +1,5 @@
 :root {
-  --brand: #2563eb;
+  --brand: #2060c8;
   --bg-light: #ffffff;
   --bg-dark: #0b1220;
   --fg-light: #111827;
@@ -35,15 +35,22 @@ body {
     backdrop-filter: blur(18px);
     border-bottom: none;
   }
-  .home-custom-layout .hero-section {
+  .hero-section {
     padding: 32px 18px;
     text-align: left;
   }
-  .home-custom-layout .cta-button {
+  .hero-section form {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .hero-section form input {
+    width: 100%;
+  }
+  .hero-section .cta-button {
     width: 100%;
     justify-content: center;
   }
-  .fixed.whatsapp-button {
+  .whatsapp-button {
     right: 16px;
     bottom: 16px;
   }

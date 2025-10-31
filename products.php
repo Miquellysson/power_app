@@ -41,6 +41,16 @@ $action = $_GET['action'] ?? 'list';
 
 /* ========= Helpers ========= */
 
+function products_flash(string $type, string $message): void {
+  $_SESSION['products_flash'] = ['type' => $type, 'message' => $message];
+}
+
+function products_take_flash(): ?array {
+  $flash = $_SESSION['products_flash'] ?? null;
+  unset($_SESSION['products_flash']);
+  return $flash;
+}
+
 function categories_options($pdo, $current=0){
   $opts='';
   try{
@@ -136,6 +146,199 @@ function product_form($row){
 }
 
 /* ========= Actions ========= */
+
+if ($action==='export') {
+  header('Content-Type: text/csv; charset=utf-8');
+  header('Content-Disposition: attachment; filename="produtos-'.date('Ymd-His').'.csv"');
+  $out = fopen('php://output', 'w');
+  fputcsv($out, ['sku','name','price','stock','category_id','description','image_path','square_payment_link','active']);
+  $stmt = $pdo->query("SELECT sku,name,price,stock,category_id,description,image_path,square_payment_link,active FROM products ORDER BY id ASC");
+  foreach ($stmt as $row) {
+    fputcsv($out, [
+      $row['sku'],
+      $row['name'],
+      number_format((float)$row['price'], 2, '.', ''),
+      (int)$row['stock'],
+      $row['category_id'],
+      $row['description'],
+      $row['image_path'],
+      $row['square_payment_link'],
+      (int)$row['active']
+    ]);
+  }
+  fclose($out);
+  exit;
+}
+
+if ($action==='import') {
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+    if (empty($_FILES['csv']['name']) || $_FILES['csv']['error'] !== UPLOAD_ERR_OK) {
+      products_flash('error', 'Selecione um arquivo CSV válido.');
+      header('Location: products.php?action=import'); exit;
+    }
+    $tmp = $_FILES['csv']['tmp_name'];
+    $handle = fopen($tmp, 'r');
+    if (!$handle) {
+      products_flash('error', 'Não foi possível ler o arquivo enviado.');
+      header('Location: products.php?action=import'); exit;
+    }
+    $delimiter = ';';
+    $header = fgetcsv($handle, 0, $delimiter);
+    if ($header && count($header) < 2) {
+      rewind($handle);
+      $delimiter = ',';
+      $header = fgetcsv($handle, 0, $delimiter);
+    }
+    if (!$header) {
+      fclose($handle);
+      products_flash('error', 'Arquivo CSV vazio ou inválido.');
+      header('Location: products.php?action=import'); exit;
+    }
+    $headerLower = array_map(fn($v) => strtolower(trim($v)), $header);
+    $headerMap = array_flip($headerLower);
+    foreach (['sku','name','price','stock'] as $required) {
+      if (!isset($headerMap[$required])) {
+        fclose($handle);
+        products_flash('error', 'Cabeçalho inválido. Campos obrigatórios: sku, name, price, stock.');
+        header('Location: products.php?action=import'); exit;
+      }
+    }
+    $inserted = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = [];
+    $line = 1;
+    $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
+    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=? WHERE id=?");
+    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,NOW())");
+    $pdo->beginTransaction();
+    try {
+      while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+        $line++;
+        if (count($row) === 1 && trim($row[0]) === '') {
+          continue;
+        }
+        $data = [];
+        foreach ($headerLower as $idx => $col) {
+          $data[$col] = trim((string)($row[$idx] ?? ''));
+        }
+        $sku = $data['sku'] ?? '';
+        if ($sku === '') {
+          $errors[] = "Linha {$line}: SKU vazio, registro ignorado.";
+          $skipped++;
+          continue;
+        }
+        $name = $data['name'] ?? '';
+        if ($name === '') {
+          $errors[] = "Linha {$line}: Nome vazio para o SKU {$sku}.";
+          $skipped++;
+          continue;
+        }
+        $priceRaw = str_replace(['.',','], ['','.'], $data['price'] ?? '0');
+        if (!is_numeric($priceRaw)) {
+          $errors[] = "Linha {$line}: Preço inválido para o SKU {$sku}.";
+          $skipped++;
+          continue;
+        }
+        $price = (float)$priceRaw;
+        $stock = (int)($data['stock'] ?? 0);
+        $categoryId = null;
+        if (isset($data['category_id']) && $data['category_id'] !== '') {
+          $categoryId = (int)$data['category_id'];
+          if ($categoryId < 0) $categoryId = null;
+        }
+        $description = $data['description'] ?? '';
+        $imagePath = $data['image_path'] ?? null;
+        $squareInput = $data['square_payment_link'] ?? '';
+        [$squareOk, $squareLink, $squareError] = normalize_square_link($squareInput);
+        if (!$squareOk) {
+          $errors[] = "Linha {$line}: {$squareError}";
+          $skipped++;
+          continue;
+        }
+        $active = isset($data['active']) ? (int)$data['active'] : 1;
+        if ($active !== 0) $active = 1;
+        $selectSku->execute([$sku]);
+        $existing = $selectSku->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+          $featured = (int)($existing['featured'] ?? 0);
+          $imgToUse = ($imagePath !== null && $imagePath !== '') ? $imagePath : ($existing['image_path'] ?? null);
+          $descToUse = $description !== '' ? $description : ($existing['description'] ?? '');
+          $categoryToUse = $categoryId ?? ($existing['category_id'] ?? null);
+          $squareToUse = $squareLink !== '' ? $squareLink : ($existing['square_payment_link'] ?? '');
+          $updateStmt->execute([
+            $name,
+            $sku,
+            $price,
+            $stock,
+            $categoryToUse,
+            $descToUse,
+            $active,
+            $featured,
+            $imgToUse,
+            $squareToUse,
+            $existing['id']
+          ]);
+          $updated++;
+        } else {
+          $insertStmt->execute([
+            $name,
+            $sku,
+            $price,
+            $stock,
+            $categoryId,
+            $description,
+            $active,
+            0,
+            $imagePath ?: null,
+            $squareLink
+          ]);
+          $inserted++;
+        }
+      }
+      $pdo->commit();
+    } catch (Throwable $e) {
+      $pdo->rollBack();
+      fclose($handle);
+      products_flash('error', 'Erro ao importar: '.$e->getMessage());
+      header('Location: products.php?action=import'); exit;
+    }
+    fclose($handle);
+    $parts = [];
+    if ($inserted) $parts[] = "{$inserted} produto(s) criado(s)";
+    if ($updated) $parts[] = "{$updated} produto(s) atualizado(s)";
+    if ($skipped) $parts[] = "{$skipped} linha(s) ignorada(s)";
+    if ($errors) {
+      $parts[] = implode(' ', $errors);
+      products_flash('warning', implode(' | ', $parts));
+    } else {
+      products_flash('success', $parts ? implode(' | ', $parts) : 'Importação concluída.');
+    }
+    header('Location: products.php'); exit;
+  }
+
+  admin_header('Importar produtos');
+  echo '<div class="card"><div class="card-title">Importar produtos via CSV</div><div class="p-4 space-y-4">';
+  $flash = products_take_flash();
+  if ($flash) {
+    $class = $flash['type'] === 'error' ? 'alert alert-error' : ($flash['type'] === 'warning' ? 'alert alert-warning' : 'alert alert-success');
+    $icon = $flash['type'] === 'error' ? 'fa-circle-exclamation' : ($flash['type'] === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check');
+    echo '<div class="'.$class.'"><i class="fa-solid '.$icon.' mr-2"></i>'.sanitize_html($flash['message']).'</div>';
+  }
+  echo '<p class="text-sm text-gray-600">Envie um arquivo CSV (UTF-8) com o cabeçalho <code>sku,name,price,stock,category_id,description,image_path,square_payment_link,active</code>. SKU existente é atualizado; demais são criados.</p>';
+  echo '<p class="text-sm text-gray-600">Use <a class="text-brand-600 underline" href="products.php?action=export">Exportar CSV</a> para gerar um modelo.</p>';
+  echo '<form method="post" enctype="multipart/form-data" class="space-y-3">';
+  echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
+  echo '  <input class="input w-full" type="file" name="csv" accept=".csv" required>';
+  echo '  <div class="flex gap-2">';
+  echo '    <button class="btn btn-primary" type="submit"><i class="fa-solid fa-file-arrow-up mr-2"></i>Importar</button>';
+  echo '    <a class="btn btn-ghost" href="products.php"><i class="fa-solid fa-arrow-left mr-2"></i>Voltar</a>';
+  echo '  </div>';
+  echo '</form></div></div>';
+  admin_footer(); exit;
+}
+
 
 if ($action==='new') {
   admin_header('Novo produto');
@@ -322,6 +525,12 @@ if ($action==='delete') {
 /* ========= Listagem ========= */
 
 admin_header('Produtos');
+$flash = products_take_flash();
+if ($flash) {
+  $class = $flash['type'] === 'error' ? 'alert alert-error' : ($flash['type'] === 'warning' ? 'alert alert-warning' : 'alert alert-success');
+  $icon = $flash['type'] === 'error' ? 'fa-circle-exclamation' : ($flash['type'] === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check');
+  echo '<div class="'.$class.' mx-auto max-w-4xl mb-4"><i class="fa-solid '.$icon.' mr-2"></i>'.sanitize_html($flash['message']).'</div>';
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $w = " WHERE 1=1 ";
 $p = [];
@@ -334,7 +543,14 @@ $st->execute($p);
 
 echo '<div class="card">';
 echo '<div class="card-title">Produtos</div>';
-echo '<div class="p-3 row gap"><form method="get" class="row gap search"><input type="hidden" name="action" value="list"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome ou SKU"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form><a class="btn alt" href="products.php?action=new"><i class="fa-solid fa-plus"></i> Novo</a></div>';
+echo '<div class="p-3 row gap items-center flex-wrap">';
+echo '  <form method="get" class="row gap search"><input type="hidden" name="action" value="list"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome ou SKU"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form>';
+echo '  <div class="flex gap-2 flex-wrap">';
+echo '    <a class="btn alt" href="products.php?action=new"><i class="fa-solid fa-plus"></i> Novo</a>';
+echo '    <a class="btn" href="products.php?action=import"><i class="fa-solid fa-file-arrow-up"></i> Importar CSV</a>';
+echo '    <a class="btn btn-ghost" href="products.php?action=export"><i class="fa-solid fa-file-arrow-down"></i> Exportar CSV</a>';
+echo '  </div>';
+echo '</div>';
 echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
 foreach($st as $r){
   echo '<tr>';

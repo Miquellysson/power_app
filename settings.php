@@ -282,6 +282,24 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $storeAddress = pm_sanitize($_POST['store_address'] ?? '', 240);
   setting_set('store_address', $storeAddress);
 
+  $metaTitle = pm_sanitize($_POST['store_meta_title'] ?? '', 160);
+  if ($metaTitle === '') {
+    $metaTitle = ($storeName ?: 'Farma Fácil').' | Loja';
+  }
+  setting_set('store_meta_title', $metaTitle);
+
+  $pwaName = pm_sanitize($_POST['pwa_name'] ?? '', 80);
+  if ($pwaName === '') {
+    $pwaName = $storeName ?: 'Farma Fácil';
+  }
+  setting_set('pwa_name', $pwaName);
+
+  $pwaShort = pm_sanitize($_POST['pwa_short_name'] ?? '', 40);
+  if ($pwaShort === '') {
+    $pwaShort = $pwaName;
+  }
+  setting_set('pwa_short_name', $pwaShort);
+
   if (!empty($_FILES['store_logo']['name'])) {
     $upload = save_logo_upload($_FILES['store_logo']);
     if (!empty($upload['success'])) {
@@ -318,6 +336,18 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   setting_set('whatsapp_number', $whatsNumber);
   setting_set('whatsapp_button_text', $whatsButtonText);
   setting_set('whatsapp_message', $whatsMessage);
+
+  if (!empty($_FILES['pwa_icon']['name'])) {
+    $pwaUpload = save_pwa_icon_upload($_FILES['pwa_icon']);
+    if (empty($pwaUpload['success'])) {
+      $errors[] = $pwaUpload['message'] ?? 'Falha ao atualizar o ícone do app.';
+    }
+  }
+  $themeColor = pm_sanitize($_POST['theme_color'] ?? '#2060C8', 20);
+  if (!preg_match('/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/', $themeColor)) {
+    $themeColor = '#2060C8';
+  }
+  setting_set('theme_color', strtoupper($themeColor));
   $headerSublineNew = pm_sanitize($_POST['header_subline'] ?? '', 120);
   if ($headerSublineNew === '') $headerSublineNew = 'Farmácia Online';
   setting_set('header_subline', $headerSublineNew);
@@ -466,8 +496,14 @@ $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma 
 $headerSublineCurrent = setting_get('header_subline', 'Farmácia Online');
 $footerTitleCurrent = setting_get('footer_title', 'FarmaFixed');
 $footerDescriptionCurrent = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+$themeColorCurrent = setting_get('theme_color', '#2060C8');
 $heroBackgroundCurrent = setting_get('hero_background', 'gradient');
 $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
+$metaTitleCurrent = setting_get('store_meta_title', ($storeNameCurrent ?: 'Farma Fácil').' | Loja');
+$pwaNameCurrent = setting_get('pwa_name', $storeNameCurrent ?: 'Farma Fácil');
+$pwaShortNameCurrent = setting_get('pwa_short_name', $pwaNameCurrent);
+$pwaIcons = get_pwa_icon_paths();
+$pwaIconPreview = pwa_icon_url(192);
     ?>
     <form class="space-y-6" method="post" enctype="multipart/form-data" action="settings.php?tab=general&action=save_general">
       <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
@@ -521,7 +557,7 @@ $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Cor primária (theme-color)</label>
-          <input class="input w-full" type="color" name="theme_color" value="<?= sanitize_html(setting_get('theme_color', '#2060C8')); ?>">
+          <input class="input w-full" type="color" name="theme_color" value="<?= sanitize_html($themeColorCurrent); ?>">
           <p class="hint mt-1">Usada em navegadores móveis e barras de título.</p>
         </div>
         <div>
@@ -555,6 +591,39 @@ $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
             <label class="block text-sm font-medium mb-1">Mensagem inicial enviada no WhatsApp</label>
             <textarea class="textarea w-full" name="whatsapp_message" rows="3" maxlength="400"><?= sanitize_html($whatsappMessage); ?></textarea>
             <p class="hint mt-1">Será preenchida automaticamente quando o cliente abrir a conversa.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="md:col-span-2 border border-gray-200 rounded-xl p-4 bg-white">
+        <h3 class="text-md font-semibold mb-2 flex items-center gap-2"><i class="fa-solid fa-mobile-screen-button text-brand-600"></i> Identidade do App/PWA</h3>
+        <p class="text-xs text-gray-500 mb-3">Personalize o título da aba, o nome exibido quando instalado e o ícone utilizado pelo aplicativo.</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Título da aba (meta title)</label>
+            <input class="input w-full" name="store_meta_title" maxlength="160" value="<?= sanitize_html($metaTitleCurrent); ?>">
+            <p class="hint mt-1">Aparece em <code>&lt;title&gt;</code> e no histórico do navegador. Ex.: "<?= sanitize_html($storeNameCurrent ?: 'Farma Fácil'); ?> | Loja".</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Nome do app (PWA)</label>
+            <input class="input w-full" name="pwa_name" maxlength="80" value="<?= sanitize_html($pwaNameCurrent); ?>" required>
+            <p class="hint mt-1">Nome completo exibido ao instalar o app.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Nome curto</label>
+            <input class="input w-full" name="pwa_short_name" maxlength="40" value="<?= sanitize_html($pwaShortNameCurrent); ?>" required>
+            <p class="hint mt-1">Usado em ícones e notificações. Máximo recomendado: 12 caracteres.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Ícone do app (PNG fundo transparente)</label>
+            <?php if ($pwaIconPreview): ?>
+              <div class="flex items-center gap-4 mb-2">
+                <img src="<?= sanitize_html($pwaIconPreview); ?>" alt="Ícone atual" class="h-16 w-16 rounded-lg border bg-white p-2">
+                <span class="text-xs text-gray-500 leading-snug">Tamanhos gerados automaticamente (512x512, 192x192 e 180x180).</span>
+              </div>
+            <?php endif; ?>
+            <input class="block w-full text-sm text-gray-600" type="file" name="pwa_icon" accept=".png">
+            <p class="hint mt-1">Envie uma imagem quadrada, preferencialmente 512x512 px, em formato PNG.</p>
           </div>
         </div>
       </div>
