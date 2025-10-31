@@ -277,54 +277,8 @@ try{
   /* ===== Settings (com HERO no topo) ===== */
   if ($route==='settings') {
     require_admin();
-    $cfg  = cfg();
-    $name_current    = setting_get('store_name',    $cfg['store']['name'] ?? 'Farma Fácil');
-    $email_current   = setting_get('store_email',   $cfg['store']['support_email'] ?? '');
-    $phone_current   = setting_get('store_phone',   $cfg['store']['phone'] ?? '');
-    $address_current = setting_get('store_address', $cfg['store']['address'] ?? '');
-    $logo_current    = find_logo_path();
-
-    if ($_SERVER['REQUEST_METHOD']==='POST') {
-      if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
-      $name    = sanitize_html($_POST['store_name'] ?? '');
-      $email   = sanitize_html($_POST['store_email'] ?? '');
-      $phone   = sanitize_html($_POST['store_phone'] ?? '');
-      $address = sanitize_html($_POST['store_address'] ?? '');
-      setting_set('store_name',$name);
-      if (validate_email($email)) setting_set('store_email',$email);
-      setting_set('store_phone',$phone);
-      setting_set('store_address',$address);
-      if (!empty($_FILES['store_logo']['name']) && $_FILES['store_logo']['error']===UPLOAD_ERR_OK) {
-        $dir = __DIR__.'/storage/logo'; @mkdir($dir,0775,true);
-        $ext = strtolower(pathinfo($_FILES['store_logo']['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext,['png','jpg','jpeg','webp'])) $ext='png';
-        $fname = 'logo_'.time().'.'.$ext;
-        if (move_uploaded_file($_FILES['store_logo']['tmp_name'], $dir.'/'.$fname)) {
-          $rel='storage/logo/'.$fname; setting_set('store_logo_url',$rel); $logo_current=$rel;
-        }
-      }
-      header('Location: admin.php?route=settings&saved=1'); exit;
-    }
-
-    admin_header('Configurações');
-    admin_hero('Configurações da Loja', 'Atualize dados, logo e informações de contato');
-
-    if (isset($_GET['saved'])) echo '<div class="mb-4 p-3 border border-green-200 bg-green-50 text-green-700 rounded">Salvo com sucesso.</div>';
-    echo '<form class="card p-5 space-y-4" method="post" enctype="multipart/form-data" action="admin.php?route=settings">';
-    echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
-    echo '  <div class="grid md:grid-cols-2 gap-4">';
-    echo '    <div><label class="block text-sm mb-1">Nome do negócio</label><input class="w-full border rounded px-3 py-2" name="store_name" value="'.sanitize_html($name_current).'" required></div>';
-    echo '    <div><label class="block text-sm mb-1">E-mail de suporte</label><input class="w-full border rounded px-3 py-2" name="store_email" type="email" value="'.sanitize_html($email_current).'"></div>';
-    echo '    <div><label class="block text-sm mb-1">Telefone</label><input class="w-full border rounded px-3 py-2" name="store_phone" value="'.sanitize_html($phone_current).'"></div>';
-    echo '    <div><label class="block text-sm mb-1">Endereço</label><input class="w-full border rounded px-3 py-2" name="store_address" value="'.sanitize_html($address_current).'"></div>';
-    echo '  </div>';
-    echo '  <div><label class="block text-sm mb-1">Logo (PNG/JPG/WEBP)</label>';
-    if ($logo_current) echo '    <div class="mb-2"><img src="'.sanitize_html($logo_current).'" alt="logo atual" style="height:48px;border-radius:.5rem"></div>';
-    echo '    <input type="file" name="store_logo" accept=".png,.jpg,.jpeg,.webp"></div>';
-    echo '  <div class="pt-2 flex gap-2"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i><span> Salvar</span></button>';
-    echo '  <a class="btn btn-ghost" target="_blank" href="index.php"><i class="fa-solid fa-store"></i><span> Loja</span></a></div>';
-    echo '</form>';
-    admin_footer(); exit;
+    header('Location: settings.php?tab=general');
+    exit;
   }
 
   /* ===== Ping ===== */

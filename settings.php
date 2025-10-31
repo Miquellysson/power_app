@@ -317,6 +317,15 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   setting_set('whatsapp_number', $whatsNumber);
   setting_set('whatsapp_button_text', $whatsButtonText);
   setting_set('whatsapp_message', $whatsMessage);
+  $headerSublineNew = pm_sanitize($_POST['header_subline'] ?? '', 120);
+  if ($headerSublineNew === '') $headerSublineNew = 'Farmácia Online';
+  setting_set('header_subline', $headerSublineNew);
+  $footerTitleNew = pm_sanitize($_POST['footer_title'] ?? '', 80);
+  if ($footerTitleNew === '') $footerTitleNew = 'FarmaFixed';
+  setting_set('footer_title', $footerTitleNew);
+  $footerDescriptionNew = pm_sanitize($_POST['footer_description'] ?? '', 160);
+  if ($footerDescriptionNew === '') $footerDescriptionNew = 'Sua farmácia online com experiência de app.';
+  setting_set('footer_description', $footerDescriptionNew);
 
   if ($errors) {
     $_SESSION['settings_general_error'] = implode(' ', $errors);
@@ -449,10 +458,15 @@ admin_header('Configurações');
     <?php
       $heroTitleCurrent = setting_get('home_hero_title', 'Tudo para sua saúde');
       $heroSubtitleCurrent = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
-      $whatsappEnabled = (int)setting_get('whatsapp_enabled', '0');
-      $whatsappNumber = setting_get('whatsapp_number', '');
-      $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
-      $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
+$whatsappEnabled = (int)setting_get('whatsapp_enabled', '0');
+$whatsappNumber = setting_get('whatsapp_number', '');
+$whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
+$whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
+$headerSublineCurrent = setting_get('header_subline', 'Farmácia Online');
+$footerTitleCurrent = setting_get('footer_title', 'FarmaFixed');
+$footerDescriptionCurrent = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+$heroBackgroundCurrent = setting_get('hero_background', 'gradient');
+$heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
     ?>
     <form class="space-y-6" method="post" enctype="multipart/form-data" action="settings.php?tab=general&action=save_general">
       <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
@@ -488,15 +502,35 @@ admin_header('Configurações');
       <hr class="border-gray-200">
 
       <h3 class="text-md font-semibold">Texto do destaque na Home</h3>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium mb-1">Título principal</label>
-        <input class="input w-full" name="home_hero_title" maxlength="160" value="<?= sanitize_html($heroTitleCurrent); ?>" required>
-        <p class="text-xs text-gray-500 mt-1">Texto destacado exibido em negrito (ex.: "Tudo para sua saúde").</p>
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium mb-1">Subtítulo</label>
-        <textarea class="textarea w-full" name="home_hero_subtitle" rows="2" maxlength="240" required><?= sanitize_html($heroSubtitleCurrent); ?></textarea>
-        <p class="text-xs text-gray-500 mt-1">Linha de apoio exibida logo abaixo do título.</p>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Título principal</label>
+          <input class="input w-full" name="home_hero_title" maxlength="160" value="<?= sanitize_html($heroTitleCurrent); ?>" required>
+          <p class="text-xs text-gray-500 mt-1">Texto destacado exibido em negrito (ex.: "Tudo para sua saúde").</p>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Subtítulo</label>
+          <textarea class="textarea w-full" name="home_hero_subtitle" rows="2" maxlength="240" required><?= sanitize_html($heroSubtitleCurrent); ?></textarea>
+          <p class="text-xs text-gray-500 mt-1">Linha de apoio exibida logo abaixo do título.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Texto curto abaixo do logo</label>
+          <input class="input w-full" name="header_subline" maxlength="120" value="<?= sanitize_html($headerSublineCurrent); ?>" placeholder="Farmácia Online">
+          <p class="hint mt-1">Exibido no topo, ao lado da logo.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Cor primária (theme-color)</label>
+          <input class="input w-full" type="color" name="theme_color" value="<?= sanitize_html(setting_get('theme_color', '#2060C8')); ?>">
+          <p class="hint mt-1">Usada em navegadores móveis e barras de título.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Título do rodapé</label>
+          <input class="input w-full" name="footer_title" maxlength="80" value="<?= sanitize_html($footerTitleCurrent); ?>">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Descrição do rodapé</label>
+          <textarea class="textarea w-full" name="footer_description" rows="2" maxlength="160"><?= sanitize_html($footerDescriptionCurrent); ?></textarea>
+        </div>
       </div>
 
       <div class="md:col-span-2 border border-gray-200 rounded-xl p-4 bg-white">

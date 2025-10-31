@@ -281,7 +281,8 @@ function app_header() {
   echo '  <title>'.htmlspecialchars($d['title'] ?? 'Farma Fácil').' | Loja</title>';
   echo '  <meta name="description" content="FarmaFixed — sua farmácia online com experiência de app: rápida, responsiva, segura.">';
   echo '  <link rel="manifest" href="/manifest.webmanifest">';
-  echo '  <meta name="theme-color" content="#B91C1C">';
+  $themeColor = setting_get('theme_color', '#2060C8');
+  echo '  <meta name="theme-color" content="'.htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8').'">';
 
   // ====== iOS PWA (suporte ao Add to Home Screen) ======
   echo '  <link rel="apple-touch-icon" href="/assets/icons/farma-180.png">';
@@ -324,8 +325,9 @@ function app_header() {
   }
   echo '      <div>';
   $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
+  $headerSubline = setting_get('header_subline', 'Farmácia Online');
   echo '        <div class="font-semibold leading-tight">'.htmlspecialchars($store_name).'</div>';
-  echo '        <div class="text-xs text-gray-500">Farmácia Online</div>';
+  echo '        <div class="text-xs text-gray-500">'.htmlspecialchars($headerSubline, ENT_QUOTES, 'UTF-8').'</div>';
   echo '      </div>';
   echo '    </a>';
 
@@ -376,8 +378,10 @@ function app_footer() {
   echo '<footer class="mt-12 bg-white border-t">';
   echo '  <div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-4 gap-8 text-sm">';
   echo '    <div>';
-  echo '      <div class="font-semibold mb-2">FarmaFixed</div>';
-  echo '      <p class="text-gray-500">Sua farmácia online com experiência de app.</p>';
+  $footerTitle = setting_get('footer_title', 'FarmaFixed');
+  $footerDescription = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+  echo '      <div class="font-semibold mb-2">'.htmlspecialchars($footerTitle, ENT_QUOTES, 'UTF-8').'</div>';
+  echo '      <p class="text-gray-500">'.htmlspecialchars($footerDescription, ENT_QUOTES, 'UTF-8').'</p>';
   echo '    </div>';
   echo '    <div>';
   echo '      <div class="font-semibold mb-2">Links</div>';
@@ -654,6 +658,9 @@ if ($route === 'home') {
   $heroSubtitle = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
   $heroTitleHtml = htmlspecialchars($heroTitle, ENT_QUOTES, 'UTF-8');
   $heroSubtitleHtml = htmlspecialchars($heroSubtitle, ENT_QUOTES, 'UTF-8');
+  $heroBackground = setting_get('hero_background', 'gradient');
+  $heroAccentColor = setting_get('hero_accent_color', '#F59E0B');
+  $heroBackgroundImage = setting_get('hero_background_image', '');
 
   if ($hasCustomLayout) {
     if ($builderCss !== '') {
@@ -668,7 +675,16 @@ if ($route === 'home') {
     echo '  </form>';
     echo '</section>';
   } else {
-    echo '<section class="bg-gradient-to-br from-brand-700 to-amber-400 text-white py-10 mb-8">';
+    $heroClasses = 'text-white py-10 mb-8';
+    $heroStyleAttr = '';
+    if ($heroBackground === 'solid') {
+      $heroStyleAttr = ' style=\"background: '.htmlspecialchars($heroAccentColor, ENT_QUOTES, 'UTF-8').';\"';
+    } elseif ($heroBackground === 'image' && $heroBackgroundImage !== '') {
+      $heroStyleAttr = ' style=\"background:url(\''.htmlspecialchars($heroBackgroundImage, ENT_QUOTES, 'UTF-8').'\') center / cover no-repeat;\"';
+    } else {
+      $heroClasses = 'bg-gradient-to-br from-brand-700 to-brand-500 text-white py-10 mb-8';
+    }
+    echo '<section class="'.$heroClasses.'"'.$heroStyleAttr.'>';
     echo '  <div class="max-w-7xl mx-auto px-4 text-center">';
     echo '    <h2 class="text-3xl md:text-5xl font-bold mb-3">'.$heroTitleHtml.'</h2>';
     echo '    <p class="text-white/90 text-lg mb-6">'.$heroSubtitleHtml.'</p>';
