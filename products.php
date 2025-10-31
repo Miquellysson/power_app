@@ -522,6 +522,32 @@ if ($action==='delete') {
   header('Location: products.php'); exit;
 }
 
+if ($action==='destroy') {
+  $id=(int)($_GET['id'] ?? 0);
+  $csrf=$_GET['csrf'] ?? '';
+  if (!csrf_check($csrf)) die('CSRF');
+  if ($id > 0) {
+    $st=$pdo->prepare("DELETE FROM products WHERE id=?");
+    $st->execute([$id]);
+    products_flash('success', 'Produto #'.$id.' excluído definitivamente.');
+  }
+  header('Location: products.php'); exit;
+}
+
+if ($action==='bulk_destroy' && $_SERVER['REQUEST_METHOD']==='POST') {
+  if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  $ids = array_filter(array_map('intval', $_POST['selected'] ?? []));
+  if ($ids) {
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $st = $pdo->prepare("DELETE FROM products WHERE id IN ($placeholders)");
+    $st->execute($ids);
+    products_flash('success', count($ids).' produto(s) excluído(s) definitivamente.');
+  } else {
+    products_flash('warning', 'Selecione pelo menos um produto para excluir.');
+  }
+  header('Location: products.php'); exit;
+}
+
 /* ========= Listagem ========= */
 
 admin_header('Produtos');
@@ -551,9 +577,12 @@ echo '    <a class="btn" href="products.php?action=import"><i class="fa-solid fa
 echo '    <a class="btn btn-ghost" href="products.php?action=export"><i class="fa-solid fa-file-arrow-down"></i> Exportar CSV</a>';
 echo '  </div>';
 echo '</div>';
-echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
+echo '<form id="bulk-delete-form" method="post" action="products.php?action=bulk_destroy">';
+echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
+echo '  <div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th><input type="checkbox" id="checkAllProducts"></th><th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
 foreach($st as $r){
   echo '<tr>';
+  echo '<td><input type="checkbox" name="selected[]" value="'.(int)$r['id'].'" class="product-select"></td>';
   echo '<td>'.(int)$r['id'].'</td>';
   echo '<td>'.sanitize_html($r['sku']).'</td>';
   echo '<td>'.sanitize_html($r['name']).'</td>';
@@ -568,9 +597,23 @@ foreach($st as $r){
     echo '<td><span class="badge danger">Pendente</span></td>';
   }
   echo '<td>'.((int)$r['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
-  echo '<td><a class="btn" href="products.php?action=edit&id='.(int)$r['id'].'"><i class="fa-solid fa-pen"></i> Editar</a> <a class="btn" href="products.php?action=delete&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Desativar este produto?\')"><i class="fa-solid fa-trash"></i> Desativar</a></td>';
+  echo '<td class="flex gap-2 flex-wrap">';
+  echo '<a class="btn" href="products.php?action=edit&id='.(int)$r['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  echo '<a class="btn" href="products.php?action=delete&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Desativar este produto?\')"><i class="fa-solid fa-ban"></i> Desativar</a>';
+  echo '<a class="btn btn-danger" href="products.php?action=destroy&id='.(int)$r['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Excluir definitivamente este produto?\')"><i class="fa-solid fa-trash"></i> Excluir</a>';
+  echo '</td>';
   echo '</tr>';
 }
-echo '</tbody></table></div></div>';
+echo '</tbody></table></div>';
+echo '<div class="p-3 flex flex-wrap gap-3 items-center justify-end border-t">';
+echo '  <button type="submit" class="btn btn-danger" onclick="return confirm(\'Excluir definitivamente os itens selecionados?\')"><i class="fa-solid fa-trash-can mr-2"></i>Excluir selecionados</button>';
+echo '</div>';
+echo '</form></div>';
+echo '<script>
+document.getElementById("checkAllProducts")?.addEventListener("change", function(e){
+  const checked = e.target.checked;
+  document.querySelectorAll(".product-select").forEach(cb => cb.checked = checked);
+});
+</script>';
 
 admin_footer();

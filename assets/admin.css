@@ -85,6 +85,16 @@ a{color:var(--brand-600);text-decoration:none}
   background:var(--brand-50);
   border-color:rgba(32,96,200,.3);
 }
+.btn.btn-danger{
+  background:#dc2626;
+  border-color:#dc2626;
+  color:#fff;
+  box-shadow:0 10px 24px -16px rgba(220,38,38,.8);
+}
+.btn.btn-danger:hover{
+  background:#b91c1c;
+  border-color:#b91c1c;
+}
 .btn.link{background:transparent;border:none;color:var(--brand-600);padding:0}
 .badge{
   display:inline-block;

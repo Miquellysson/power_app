@@ -331,7 +331,7 @@ function app_header() {
 
   // Topbar (estilo app) — sticky + blur
   echo '<header class="sticky top-0 z-40 border-b bg-white/90 blur-bg">';
-  echo '  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">';
+  echo '  <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">';
   echo '    <a href="?route=home" class="flex items-center gap-3">';
   if ($logoUrl) {
     echo '      <img src="'.htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8').'" class="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-sm" alt="logo">';
@@ -346,7 +346,7 @@ function app_header() {
   echo '      </div>';
   echo '    </a>';
 
-  echo '    <div class="flex items-center gap-2">';
+  echo '    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0">';
   // Botão A2HS (Add to Home Screen)
   echo '      <button id="btnA2HS" class="a2hs-btn hidden px-3 py-2 rounded-lg text-brand-600 bg-brand-50 hover:bg-brand-100 text-sm"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Adicionar</button>';
 
@@ -814,13 +814,13 @@ if ($route === 'home') {
 
   echo '<section class="max-w-7xl mx-auto px-4 mb-12">';
   echo '  <div class="grid gap-4 sm:grid-cols-2">';
-  echo '    <div class="rounded-2xl border border-brand-100 bg-white shadow-sm p-6 flex flex-col gap-2">';
-  echo '      <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 grid place-items-center text-xl"><i class="fa-solid fa-shield-heart"></i></div>';
+  echo '    <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-[#e8f0ff] via-[#f2f6ff] to-[#f8fafc] shadow-sm p-6 flex flex-col gap-2">';
+  echo '      <div class="w-12 h-12 rounded-xl bg-white/70 text-brand-600 grid place-items-center text-xl shadow-sm"><i class="fa-solid fa-shield-heart"></i></div>';
   echo '      <h3 class="text-lg font-semibold text-gray-900">Produtos Originais</h3>';
   echo '      <p class="text-sm text-gray-600 leading-relaxed">Nossos produtos são 100% originais e testados em laboratório.</p>';
   echo '    </div>';
-  echo '    <div class="rounded-2xl border border-brand-100 bg-white shadow-sm p-6 flex flex-col gap-2">';
-  echo '      <div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 grid place-items-center text-xl"><i class="fa-solid fa-medal"></i></div>';
+  echo '    <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-[#e8f0ff] via-[#f2f6ff] to-[#f8fafc] shadow-sm p-6 flex flex-col gap-2">';
+  echo '      <div class="w-12 h-12 rounded-xl bg-white/70 text-brand-600 grid place-items-center text-xl shadow-sm"><i class="fa-solid fa-medal"></i></div>';
   echo '      <h3 class="text-lg font-semibold text-gray-900">Qualidade e Segurança</h3>';
   echo '      <p class="text-sm text-gray-600 leading-relaxed">Compre com quem se preocupa com a qualidade dos produtos.</p>';
   echo '    </div>';
