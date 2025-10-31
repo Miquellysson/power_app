@@ -89,6 +89,11 @@ function pm_collect_settings($type, array $data) {
       $settings['open_new_tab'] = !empty($data['square_open_new_tab']);
       $settings['redirect_url'] = pm_sanitize($data['square_redirect_url'] ?? '', 255);
       break;
+    case 'stripe':
+      $settings['mode'] = pm_sanitize($data['stripe_mode'] ?? 'stripe_product_link', 60);
+      $settings['open_new_tab'] = !empty($data['stripe_open_new_tab']);
+      $settings['redirect_url'] = pm_sanitize($data['stripe_redirect_url'] ?? '', 255);
+      break;
     default:
       $settings['mode'] = pm_sanitize($data['custom_mode'] ?? 'manual', 60);
       $settings['redirect_url'] = pm_sanitize($data['custom_redirect_url'] ?? '', 255);
@@ -697,14 +702,14 @@ $pwaIconPreview = pwa_icon_url(192);
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Código</label>
-            <?php $isDefaultCode = in_array($formRow['code'] ?? '', ['pix','zelle','venmo','paypal','square'], true); ?>
+            <?php $isDefaultCode = in_array($formRow['code'] ?? '', ['pix','zelle','venmo','paypal','square','stripe'], true); ?>
             <input class="input w-full" name="code" value="<?= sanitize_html($formRow['code'] ?? ''); ?>" <?= $isDefaultCode ? 'readonly' : ''; ?> placeholder="ex.: square">
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Tipo</label>
             <?php $currentType = $isDefaultCode ? ($formRow['code'] ?? 'custom') : ($formSettings['type'] ?? 'custom'); ?>
             <select class="select w-full" name="method_type" <?= $isDefaultCode ? 'disabled' : ''; ?>>
-              <?php $types = ['pix'=>'Pix','zelle'=>'Zelle','venmo'=>'Venmo','paypal'=>'PayPal','square'=>'Square','custom'=>'Personalizado']; ?>
+              <?php $types = ['pix'=>'Pix','zelle'=>'Zelle','venmo'=>'Venmo','paypal'=>'PayPal','square'=>'Square','stripe'=>'Stripe','custom'=>'Personalizado']; ?>
               <?php foreach ($types as $value => $label): ?>
                 <option value="<?= $value; ?>" <?= $currentType === $value ? 'selected' : ''; ?>><?= $label; ?></option>
               <?php endforeach; ?>
@@ -722,7 +727,7 @@ $pwaIconPreview = pwa_icon_url(192);
           <input class="input w-full" name="description" value="<?= sanitize_html($formRow['description'] ?? ''); ?>" placeholder="Visível apenas no painel">
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Instruções (placeholders: {valor_pedido}, {numero_pedido}, {email_cliente})</label>
+          <label class="block text-sm font-medium mb-1">Instruções (placeholders: {valor_pedido}, {numero_pedido}, {email_cliente}, {account_label}, {account_value}, {stripe_link})</label>
           <textarea class="textarea w-full" name="instructions" rows="4"><?= htmlspecialchars($formRow['instructions'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
         </div>
 
@@ -808,6 +813,23 @@ $pwaIconPreview = pwa_icon_url(192);
           <div data-type="square">
             <label class="block text-sm font-medium mb-1">URL fixa (opcional)</label>
             <input class="input w-full" name="square_redirect_url" value="<?= sanitize_html($formSettings['redirect_url'] ?? ''); ?>" placeholder="https://">
+          </div>
+
+          <div data-type="stripe">
+            <label class="block text-sm font-medium mb-1">Modo</label>
+            <?php $stripeMode = $formSettings['mode'] ?? 'stripe_product_link'; ?>
+            <select class="select w-full" name="stripe_mode">
+              <option value="stripe_product_link" <?= $stripeMode === 'stripe_product_link' ? 'selected' : ''; ?>>Link definido por produto</option>
+              <option value="direct_url" <?= $stripeMode === 'direct_url' ? 'selected' : ''; ?>>URL fixa</option>
+            </select>
+          </div>
+          <div data-type="stripe">
+            <label class="block text-sm font-medium mb-1">Abrir em nova aba?</label>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="stripe_open_new_tab" value="1" <?= !empty($formSettings['open_new_tab']) ? 'checked' : ''; ?>> Nova aba</label>
+          </div>
+          <div data-type="stripe">
+            <label class="block text-sm font-medium mb-1">URL fixa (opcional)</label>
+            <input class="input w-full" name="stripe_redirect_url" value="<?= sanitize_html($formSettings['redirect_url'] ?? ''); ?>" placeholder="https://">
           </div>
 
           <div data-type="custom">

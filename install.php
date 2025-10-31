@@ -52,6 +52,7 @@ try {
     stock INT NOT NULL DEFAULT 100,
     image_path VARCHAR(255) NULL,
     square_payment_link VARCHAR(255) NULL,
+    stripe_payment_link VARCHAR(255) NULL,
     active TINYINT(1) DEFAULT 1,
     featured TINYINT(1) DEFAULT 0,
     meta_title VARCHAR(255) NULL,
@@ -163,7 +164,7 @@ try {
 
   // ===== ALTERs idempotentes para colunas faltantes =====
   $tables_columns = [
-    'products'        => ['category_id','square_payment_link','active','featured','meta_title','meta_description','updated_at','shipping_cost'],
+    'products'        => ['category_id','square_payment_link','stripe_payment_link','active','featured','meta_title','meta_description','updated_at','shipping_cost'],
     'customers'       => ['city','state','zipcode','country'],
     'orders'          => ['shipping_cost','total','payment_status','admin_viewed','notes','updated_at','track_token'],
     'page_layouts'    => ['meta'],
@@ -196,6 +197,9 @@ try {
             break;
           case 'products.updated_at':
             $pdo->exec("ALTER TABLE products ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+            break;
+          case 'products.stripe_payment_link':
+            $pdo->exec("ALTER TABLE products ADD COLUMN stripe_payment_link VARCHAR(255) NULL AFTER square_payment_link");
             break;
           case 'products.shipping_cost':
             $pdo->exec("ALTER TABLE products ADD COLUMN shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00 AFTER price");

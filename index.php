@@ -233,6 +233,21 @@ function load_payment_methods(PDO $pdo, array $cfg): array {
         'require_receipt' => 0
       ];
     }
+    if (!empty($paymentsCfg['stripe']['enabled'])) {
+      $defaults[] = [
+        'code' => 'stripe',
+        'name' => 'Stripe',
+        'instructions' => $paymentsCfg['stripe']['instructions'] ?? 'Abriremos o checkout Stripe em uma nova aba.',
+        'settings' => [
+          'type' => 'stripe',
+          'account_label' => 'Pagamento Stripe',
+          'account_value' => '',
+          'mode' => 'stripe_product_link',
+          'open_new_tab' => !empty($paymentsCfg['stripe']['open_new_tab'])
+        ],
+        'require_receipt' => 0
+      ];
+    }
     $cache = $defaults;
   }
 
@@ -252,6 +267,7 @@ function payment_placeholders(array $method, float $totalValue, ?int $orderId = 
     '{pix_merchant_city}' => $settings['merchant_city'] ?? '',
     '{venmo_link}' => $settings['venmo_link'] ?? ($settings['account_value'] ?? ''),
     '{paypal_business}' => $settings['business'] ?? '',
+    '{stripe_link}' => $settings['redirect_url'] ?? '',
   ];
   return $placeholders;
 }
@@ -1287,6 +1303,7 @@ if ($route === 'checkout') {
         case 'venmo': $icon = 'fa-mobile-screen-button'; break;
         case 'paypal': $icon = 'fa-paypal'; break;
         case 'square': $icon = 'fa-arrow-up-right-from-square'; break;
+        case 'stripe': $icon = 'fa-cc-stripe'; break;
       }
       echo '  <label class="border rounded-xl p-4 cursor-pointer hover:border-brand-300 flex flex-col items-center gap-2">';
       echo '    <input type="radio" name="payment" value="'.$code.'" class="sr-only" required data-code="'.$code.'">';
@@ -1449,7 +1466,8 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       'qty'=>$qty,
       'sku'=>$p['sku'],
       'shipping_cost'=>$shipCost,
-      'square_link'=> trim((string)($p['square_payment_link'] ?? ''))
+      'square_link'=> trim((string)($p['square_payment_link'] ?? '')),
+      'stripe_link'=> trim((string)($p['stripe_payment_link'] ?? ''))
     ];
     $subtotal += (float)$p['price'] * $qty;
     $shipping += $shipCost * $qty;
@@ -1471,6 +1489,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $squareRedirectUrl = null;
   $squareWarning = null;
+  $squareOpenNewTab = !empty($methodSettings['open_new_tab']);
   if ($methodType === 'square' && ($methodSettings['mode'] ?? 'square_product_link') === 'square_product_link') {
     $squareLinks = [];
     $squareMissing = [];
@@ -1490,6 +1509,31 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!empty($squareLinks)) {
       $keys = array_keys($squareLinks);
       $squareRedirectUrl = $keys[0];
+    }
+  }
+
+  $stripeRedirectUrl = null;
+  $stripeWarning = null;
+  $stripeOpenNewTab = !empty($methodSettings['open_new_tab']);
+  if ($methodType === 'stripe' && ($methodSettings['mode'] ?? 'stripe_product_link') === 'stripe_product_link') {
+    $stripeLinks = [];
+    $stripeMissing = [];
+    foreach ($items as $itemInfo) {
+      $link = $itemInfo['stripe_link'] ?? '';
+      if ($link === '') {
+        $stripeMissing[] = $itemInfo['name'];
+      } else {
+        $stripeLinks[$link] = true;
+      }
+    }
+    if (!empty($stripeMissing)) {
+      $cleanNames = array_map(function($name){ return sanitize_string($name ?? '', 80); }, $stripeMissing);
+      $stripeWarning = 'Pagamento Stripe pendente para: '.implode(', ', $cleanNames);
+    } elseif (count($stripeLinks) > 1) {
+      $stripeWarning = 'Mais de um link Stripe encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
+    } elseif (!empty($stripeLinks)) {
+      $keys = array_keys($stripeLinks);
+      $stripeRedirectUrl = $keys[0];
     }
   }
 
@@ -1538,6 +1582,14 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $payRef = $methodSettings['redirect_url'];
       }
       break;
+    case 'stripe':
+      $mode = $methodSettings['mode'] ?? 'stripe_product_link';
+      if ($mode === 'stripe_product_link') {
+        $payRef = $stripeRedirectUrl ?: 'STRIPE:pendente';
+      } elseif (!empty($methodSettings['redirect_url'])) {
+        $payRef = $methodSettings['redirect_url'];
+      }
+      break;
     default:
       $payRef = $methodSettings['redirect_url'] ?? ($methodSettings['account_value'] ?? '');
       break;
@@ -1546,6 +1598,13 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($methodType === 'square') {
     if ($squareRedirectUrl === null || $squareRedirectUrl === '' || $squareWarning) {
       $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link Square para estes produtos. Escolha outra forma de pagamento.';
+      header('Location: ?route=checkout');
+      exit;
+    }
+  }
+  if ($methodType === 'stripe') {
+    if ($stripeRedirectUrl === null || $stripeRedirectUrl === '' || $stripeWarning) {
+      $_SESSION['checkout_error'] = $stripeWarning ?: 'Não encontramos um link Stripe para estes produtos. Escolha outra forma de pagamento.';
       header('Location: ?route=checkout');
       exit;
     }
@@ -1630,8 +1689,16 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($methodType === 'square') {
       $_SESSION['square_redirect_url'] = $squareRedirectUrl;
       $_SESSION['square_redirect_warning'] = $squareWarning;
+      $_SESSION['square_open_new_tab'] = $squareOpenNewTab ? 1 : 0;
     } else {
-      unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning']);
+      unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab']);
+    }
+    if ($methodType === 'stripe') {
+      $_SESSION['stripe_redirect_url'] = $stripeRedirectUrl;
+      $_SESSION['stripe_redirect_warning'] = $stripeWarning;
+      $_SESSION['stripe_open_new_tab'] = $stripeOpenNewTab ? 1 : 0;
+    } else {
+      unset($_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
     }
 
     header("Location: ?route=order_success&id=".$order_id);
@@ -1659,7 +1726,11 @@ if ($route === 'order_success') {
   } catch (Throwable $e) {}
   $squareRedirectSession = $_SESSION['square_redirect_url'] ?? null;
   $squareWarningSession = $_SESSION['square_redirect_warning'] ?? null;
-  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning']);
+  $squareOpenNewTabSession = !empty($_SESSION['square_open_new_tab']);
+  $stripeRedirectSession = $_SESSION['stripe_redirect_url'] ?? null;
+  $stripeWarningSession = $_SESSION['stripe_redirect_warning'] ?? null;
+  $stripeOpenNewTabSession = !empty($_SESSION['stripe_open_new_tab']);
+  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
 
   echo '<section class="max-w-3xl mx-auto px-4 py-16 text-center">';
   echo '  <div class="bg-white rounded-2xl shadow p-8">';
@@ -1680,7 +1751,34 @@ if ($route === 'order_success') {
         const key = "square_redirect_'.$order_id.'";
         if (!window.sessionStorage.getItem(key)) {
           window.sessionStorage.setItem(key, "1");
-          window.location.href = '.$squareJs.';
+          if ('.($squareOpenNewTabSession ? 'true' : 'false').') {
+            window.open('.$squareJs.', "_blank");
+          } else {
+            window.location.href = '.$squareJs.';
+          }
+        }
+      });
+    </script>';
+  }
+  if (!empty($stripeWarningSession)) {
+    echo '    <div class="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>'.htmlspecialchars($stripeWarningSession, ENT_QUOTES, "UTF-8").'</div>';
+  }
+  if (!empty($stripeRedirectSession)) {
+    $safeStripe = htmlspecialchars($stripeRedirectSession, ENT_QUOTES, "UTF-8");
+    $stripeJs = json_encode($stripeRedirectSession, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+    echo '    <div class="mt-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-800">';
+    echo '      <i class="fa-brands fa-cc-stripe mr-2"></i> Redirecionando para o pagamento Stripe... Caso não avance automaticamente, <a class="underline" href="'.$safeStripe.'">clique aqui</a>.';
+    echo '    </div>';
+    echo '    <script>
+      window.addEventListener("load", function(){
+        const key = "stripe_redirect_'.$order_id.'";
+        if (!window.sessionStorage.getItem(key)) {
+          window.sessionStorage.setItem(key, "1");
+          if ('.($stripeOpenNewTabSession ? 'true' : 'false').') {
+            window.open('.$stripeJs.', "_blank");
+          } else {
+            window.location.href = '.$stripeJs.';
+          }
         }
       });
     </script>';

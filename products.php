@@ -105,6 +105,35 @@ function normalize_square_link(string $input): array {
   return [true, $url, null];
 }
 
+function normalize_stripe_link(string $input): array {
+  $url = trim($input);
+  if ($url === '') {
+    return [true, '', null];
+  }
+  if (strlen($url) > 255) {
+    return [false, $url, 'O link do Stripe deve ter até 255 caracteres.'];
+  }
+  if (!filter_var($url, FILTER_VALIDATE_URL)) {
+    return [false, $url, 'Informe uma URL válida do Stripe.'];
+  }
+  $parts = parse_url($url);
+  $scheme = strtolower($parts['scheme'] ?? '');
+  if ($scheme !== 'https') {
+    return [false, $url, 'O link do Stripe deve começar com https://'];
+  }
+  $host = strtolower($parts['host'] ?? '');
+  $allowed = ['buy.stripe.com', 'checkout.stripe.com'];
+  $match = false;
+  foreach ($allowed as $domain) {
+    if ($host === $domain) { $match = true; break; }
+    if (substr($host, -strlen('.'.$domain)) === '.'.$domain) { $match = true; break; }
+  }
+  if (!$match) {
+    return [false, $url, 'Domínio não permitido. Use links buy.stripe.com ou checkout.stripe.com.'];
+  }
+  return [true, $url, null];
+}
+
 /** Formulário de produto (reutilizável) */
 function product_form($row){
   $id = (int)($row['id'] ?? 0);
@@ -119,6 +148,7 @@ function product_form($row){
   $featured = (int)($row['featured'] ?? 0);
   $img = sanitize_html($row['image_path'] ?? '');
   $square_link = sanitize_html($row['square_payment_link'] ?? '');
+  $stripe_link = sanitize_html($row['stripe_payment_link'] ?? '');
   $csrf = csrf_token();
 
   echo '<form class="p-4 space-y-3" method="post" enctype="multipart/form-data" action="products.php?action='.($id?'update&id='.$id:'create').'">';
@@ -139,6 +169,13 @@ function product_form($row){
     echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_link.'" target="_blank" rel="noopener">Testar link</a></p>';
   }
   echo '    </div>';
+  echo '    <div class="field md:col-span-2"><span>Link de Pagamento Stripe</span>';
+  echo '      <input class="input" type="url" name="stripe_payment_link" value="'.$stripe_link.'" placeholder="https://buy.stripe.com/...">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Cole aqui o link de pagamento do Stripe (aceita buy.stripe.com e checkout.stripe.com).</p>';
+  if ($stripe_link) {
+    echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$stripe_link.'" target="_blank" rel="noopener">Testar link</a></p>';
+  }
+  echo '    </div>';
   echo '  </div>';
   echo '  <div class="field"><span>Descrição</span><textarea class="textarea" name="description" rows="4">'.$desc.'</textarea></div>';
   echo '  <div class="field"><span>Imagem do produto (JPG/PNG/WEBP)</span><input class="input" type="file" name="image" accept=".jpg,.jpeg,.png,.webp"></div>';
@@ -153,8 +190,8 @@ if ($action==='export') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename="produtos-'.date('Ymd-His').'.csv"');
   $out = fopen('php://output', 'w');
-  fputcsv($out, ['sku','name','price','shipping_cost','stock','category_id','description','image_path','square_payment_link','active']);
-  $stmt = $pdo->query("SELECT sku,name,price,shipping_cost,stock,category_id,description,image_path,square_payment_link,active FROM products ORDER BY id ASC");
+  fputcsv($out, ['sku','name','price','shipping_cost','stock','category_id','description','image_path','square_payment_link','stripe_payment_link','active']);
+  $stmt = $pdo->query("SELECT sku,name,price,shipping_cost,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active FROM products ORDER BY id ASC");
   foreach ($stmt as $row) {
     fputcsv($out, [
       $row['sku'],
@@ -166,6 +203,7 @@ if ($action==='export') {
       $row['description'],
       $row['image_path'],
       $row['square_payment_link'],
+      $row['stripe_payment_link'],
       (int)$row['active']
     ]);
   }
@@ -213,8 +251,8 @@ if ($action==='import') {
     $errors = [];
     $line = 1;
     $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
-    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=? WHERE id=?");
-    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW())");
+    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=?, stripe_payment_link=? WHERE id=?");
+    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
     $categoryIds = [];
     try {
       $categoryIds = $pdo->query("SELECT id FROM categories")->fetchAll(PDO::FETCH_COLUMN);
@@ -276,6 +314,13 @@ if ($action==='import') {
           $skipped++;
           continue;
         }
+        $stripeInput = $data['stripe_payment_link'] ?? '';
+        [$stripeOk, $stripeLink, $stripeError] = normalize_stripe_link($stripeInput);
+        if (!$stripeOk) {
+          $errors[] = "Linha {$line}: {$stripeError}";
+          $skipped++;
+          continue;
+        }
         $active = isset($data['active']) ? (int)$data['active'] : 1;
         if ($active !== 0) $active = 1;
         $selectSku->execute([$sku]);
@@ -289,6 +334,7 @@ if ($action==='import') {
             $categoryToUse = null;
           }
           $squareToUse = $squareLink !== '' ? $squareLink : ($existing['square_payment_link'] ?? '');
+          $stripeToUse = $stripeLink !== '' ? $stripeLink : ($existing['stripe_payment_link'] ?? '');
           $updateStmt->execute([
             $name,
             $sku,
@@ -301,6 +347,7 @@ if ($action==='import') {
             $featured,
             $imgToUse,
             $squareToUse,
+            $stripeToUse,
             $existing['id']
           ]);
           $updated++;
@@ -316,7 +363,8 @@ if ($action==='import') {
             $active,
             0,
             $imagePath ?: null,
-            $squareLink
+            $squareLink,
+            $stripeLink
           ]);
           $inserted++;
         }
@@ -380,8 +428,6 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $price= (float)($_POST['price'] ?? 0);
   $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
   if ($shipping_cost < 0) $shipping_cost = 0;
-  $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
-  if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
   $description = sanitize_string($_POST['description'] ?? '', 2000);
@@ -390,6 +436,8 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $image_path = null;
   $square_input = (string)($_POST['square_payment_link'] ?? '');
   [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
+  $stripe_input = (string)($_POST['stripe_payment_link'] ?? '');
+  [$stripe_ok, $stripe_link, $stripe_error] = normalize_stripe_link($stripe_input);
   if (!$square_ok) {
     admin_header('Novo produto');
     echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
@@ -398,7 +446,22 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
-      'square_payment_link'=>$square_input
+      'square_payment_link'=>$square_input,
+      'stripe_payment_link'=>$stripe_input
+    ]);
+    echo '</div>';
+    admin_footer(); exit;
+  }
+  if (!$stripe_ok) {
+    admin_header('Novo produto');
+    echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($stripe_error).'</div>';
+    product_form([
+      'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
+      'shipping_cost'=>$shipping_cost,
+      'square_payment_link'=>$square_input,
+      'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
     admin_footer(); exit;
@@ -414,7 +477,8 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
-      'square_payment_link'=>$square_input
+      'square_payment_link'=>$square_input,
+      'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
     admin_footer(); exit;
@@ -430,9 +494,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW())");
+  $st=$pdo->prepare("INSERT INTO products(name,sku,price,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
   try {
-    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link]);
+    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     // Proteção extra caso outro processo crie o mesmo SKU no intervalo
@@ -441,9 +505,18 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
       echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> SKU duplicado no banco. Tente outro valor.</div>';
       product_form([
-        'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-        'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
-        'square_payment_link'=>$square_input
+        'name'=>$name,
+        'sku'=>$sku,
+        'price'=>$price,
+        'shipping_cost'=>$shipping_cost,
+        'stock'=>$stock,
+        'category_id'=>$category_id,
+        'description'=>$description,
+        'active'=>$active,
+        'featured'=>$featured,
+        'image_path'=>null,
+        'square_payment_link'=>$square_input,
+        'stripe_payment_link'=>$stripe_input
       ]);
       echo '</div>';
       admin_footer(); exit;
@@ -471,33 +544,39 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
 
   $st=$pdo->prepare("SELECT image_path FROM products WHERE id=?");
   $st->execute([$id]);
-  $cur=$st->fetchColumn();
+  $currentImage=$st->fetchColumn();
 
   $name = sanitize_string($_POST['name'] ?? '');
   $sku  = sanitize_string($_POST['sku'] ?? '');
   $price= (float)($_POST['price'] ?? 0);
+  $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
+  if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
   $description = sanitize_string($_POST['description'] ?? '', 2000);
   $active = (int)($_POST['active'] ?? 1);
   $featured = (int)($_POST['featured'] ?? 0);
-  $image_path = $cur;
+  $image_path = $currentImage;
   $square_input = (string)($_POST['square_payment_link'] ?? '');
   [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
-  if (!$square_ok) {
+  $stripe_input = (string)($_POST['stripe_payment_link'] ?? '');
+  [$stripe_ok, $stripe_link, $stripe_error] = normalize_stripe_link($stripe_input);
+
+  if (!$square_ok || !$stripe_ok) {
+    $alert = !$square_ok ? $square_error : $stripe_error;
     admin_header('Editar produto');
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
-    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($square_error).'</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($alert).'</div>';
     product_form([
       'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
-      'square_payment_link'=>$square_input
+      'square_payment_link'=>$square_input,
+      'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
     admin_footer(); exit;
   }
 
-  // Checagem de SKU duplicado (exclui o próprio ID)
   if ($sku === '' || sku_exists($pdo, $sku, $id)) {
     admin_header('Editar produto');
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
@@ -505,7 +584,8 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     product_form([
       'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
-      'square_payment_link'=>$square_input
+      'square_payment_link'=>$square_input,
+      'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
     admin_footer(); exit;
@@ -521,9 +601,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=? WHERE id=?");
+  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=?,stripe_payment_link=? WHERE id=?");
   try {
-    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$id]);
+    $st->execute([$name,$sku,$price,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link,$id]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     if (!empty($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062) {
@@ -531,9 +611,10 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
       echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
       echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> SKU duplicado no banco. Tente outro valor.</div>';
       product_form([
-        'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
+        'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
         'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
-        'square_payment_link'=>$square_input
+        'square_payment_link'=>$square_input,
+        'stripe_payment_link'=>$stripe_input
       ]);
       echo '</div>';
       admin_footer(); exit;
