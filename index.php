@@ -58,13 +58,23 @@ function store_logo_path() {
 
 /* === Proxy de Imagem (apenas esta adição para contornar hotlink) === */
 function proxy_img($url) {
-  $url = (string)$url;
-  if ($url === '') return $url;
+  $url = trim((string)$url);
+  if ($url === '') {
+    return '';
+  }
+  $url = str_replace('\\', '/', $url);
+  $url = preg_replace('#^(\./)+#', '', $url);
+  while (strpos($url, '../') === 0) {
+    $url = substr($url, 3);
+  }
   // Se for link http/https absoluto, passa pelo proxy local img.php
   if (preg_match('~^https?://~i', $url)) {
     return '/img.php?u=' . rawurlencode($url);
   }
-  // Caso contrário (arquivo local), retorna como está
+  // Garante caminho absoluto relativo ao root da aplicação
+  if ($url !== '' && $url[0] !== '/') {
+    $url = '/' . ltrim($url, '/');
+  }
   return $url;
 }
 

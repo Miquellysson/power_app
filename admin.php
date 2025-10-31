@@ -219,19 +219,61 @@ try{
       if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
       $email = trim($_POST['email'] ?? '');
       $pass  = (string)($_POST['password'] ?? '');
-      $ok=false;
-      if (defined('ADMIN_EMAIL') && defined('ADMIN_PASS_HASH') && $email===ADMIN_EMAIL && password_verify($pass, ADMIN_PASS_HASH)) {
-        $ok=true;
-      } else {
+
+      $userRow = null;
+      if ($email !== '') {
         try {
-          $st = db()->prepare("SELECT password_hash FROM users WHERE email=? LIMIT 1");
+          $st = db()->prepare("SELECT id, name, email, pass, role, active FROM users WHERE email=? LIMIT 1");
           $st->execute([$email]);
-          $hash = $st->fetchColumn();
-          if ($hash && password_verify($pass,$hash)) $ok=true;
-        } catch (Throwable $e) {}
+          $userRow = $st->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+          $userRow = null;
+        }
       }
-      if ($ok){ $_SESSION['admin_id']=1; $_SESSION['admin_email']=$email; header('Location: dashboard.php'); exit; }
-      $err='Credenciais inválidas';
+
+      if ($userRow && (int)($userRow['active'] ?? 0) !== 1) {
+        $err = 'Usuário inativo. Contate o administrador.';
+      } elseif ($userRow && !empty($userRow['pass']) && password_verify($pass, (string)$userRow['pass'])) {
+        $role = $userRow['role'] ?: 'admin';
+        set_admin_session([
+          'id'    => (int)$userRow['id'],
+          'email' => $userRow['email'] ?? $email,
+          'name'  => $userRow['name'] ?? $email,
+          'role'  => $role,
+        ]);
+        header('Location: dashboard.php'); exit;
+      } elseif (defined('ADMIN_EMAIL') && defined('ADMIN_PASS_HASH') && $email === ADMIN_EMAIL && password_verify($pass, ADMIN_PASS_HASH)) {
+        if (!$userRow) {
+          try {
+            $ins = db()->prepare("INSERT IGNORE INTO users(name,email,pass,role,active,created_at) VALUES(?,?,?,?,1,NOW())");
+            $ins->execute([$email, $email, ADMIN_PASS_HASH, 'super_admin']);
+            $st = db()->prepare("SELECT id, name, email, pass, role, active FROM users WHERE email=? LIMIT 1");
+            $st->execute([$email]);
+            $userRow = $st->fetch(PDO::FETCH_ASSOC);
+          } catch (Throwable $e) {
+            $userRow = null;
+          }
+        }
+        if ($userRow && ($userRow['role'] ?? '') !== 'super_admin') {
+          try {
+            $upRole = db()->prepare("UPDATE users SET role='super_admin' WHERE id=?");
+            $upRole->execute([(int)$userRow['id']]);
+            $userRow['role'] = 'super_admin';
+          } catch (Throwable $e) {}
+        }
+        $role = $userRow['role'] ?? 'super_admin';
+        $name = $userRow['name'] ?? $email;
+        $id   = isset($userRow['id']) ? (int)$userRow['id'] : 1;
+        set_admin_session([
+          'id'    => $id,
+          'email' => $email,
+          'name'  => $name,
+          'role'  => $role ?: 'super_admin',
+        ]);
+        header('Location: dashboard.php'); exit;
+      } else {
+        $err='Credenciais inválidas';
+      }
     }
 
     // Cabeçalho sem layout (sem sidebar), com hero

@@ -31,6 +31,32 @@ if (!function_exists('validate_email')){
 $pdo = db();
 require_admin();
 
+$currentAdminIsSuper = is_super_admin();
+
+function category_unique_slug(PDO $pdo, string $name, ?int $ignoreId = null): string {
+  $base = slugify($name);
+  if ($base === '') {
+    $base = 'categoria';
+  }
+  $slug = $base;
+  $suffix = 2;
+  while (true) {
+    if ($ignoreId) {
+      $st = $pdo->prepare("SELECT id FROM categories WHERE slug = ? AND id <> ? LIMIT 1");
+      $st->execute([$slug, $ignoreId]);
+    } else {
+      $st = $pdo->prepare("SELECT id FROM categories WHERE slug = ? LIMIT 1");
+      $st->execute([$slug]);
+    }
+    if (!$st->fetchColumn()) {
+      break;
+    }
+    $slug = $base . '-' . $suffix;
+    $suffix++;
+  }
+  return $slug;
+}
+
 $action = $_GET['action'] ?? 'list';
 
 if ($action==='new') {
@@ -51,8 +77,12 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $name = sanitize_string($_POST['name'] ?? '');
   $sort = (int)($_POST['sort_order'] ?? 0);
   $active= (int)($_POST['active'] ?? 1);
-  $st=$pdo->prepare("INSERT INTO categories(name,sort_order,active,created_at) VALUES(?,?,?,NOW())");
-  $st->execute([$name,$sort,$active]);
+  if ($name === '') {
+    die('Nome obrigatório');
+  }
+  $slug = category_unique_slug($pdo, $name);
+  $st=$pdo->prepare("INSERT INTO categories(name,slug,sort_order,active,created_at) VALUES(?,?,?,?,NOW())");
+  $st->execute([$name,$slug,$sort,$active]);
   header('Location: categories.php'); exit;
 }
 
@@ -80,8 +110,12 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   $name = sanitize_string($_POST['name'] ?? '');
   $sort = (int)($_POST['sort_order'] ?? 0);
   $active= (int)($_POST['active'] ?? 1);
-  $st=$pdo->prepare("UPDATE categories SET name=?,sort_order=?,active=? WHERE id=?");
-  $st->execute([$name,$sort,$active,$id]);
+  if ($name === '') {
+    die('Nome obrigatório');
+  }
+  $slug = category_unique_slug($pdo, $name, $id);
+  $st=$pdo->prepare("UPDATE categories SET name=?,slug=?,sort_order=?,active=? WHERE id=?");
+  $st->execute([$name,$slug,$sort,$active,$id]);
   header('Location: categories.php'); exit;
 }
 
@@ -89,6 +123,7 @@ if ($action==='delete') {
   $id=(int)($_GET['id'] ?? 0);
   $csrf=$_GET['csrf'] ?? '';
   if (!csrf_check($csrf)) die('CSRF');
+  require_super_admin();
   $st=$pdo->prepare("DELETE FROM categories WHERE id=?");
   $st->execute([$id]);
   header('Location: categories.php'); exit;
@@ -96,6 +131,7 @@ if ($action==='delete') {
 
 if ($action==='bulk_delete' && $_SERVER['REQUEST_METHOD']==='POST') {
   if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
+  require_super_admin();
   $ids = array_filter(array_map('intval', $_POST['selected'] ?? []));
   if ($ids) {
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -115,19 +151,36 @@ echo '<div class="card"><div class="card-title">Categorias</div>';
 echo '<div class="p-3 row gap"><form class="row gap search"><input class="input" name="q" value="'.sanitize_html($q).'" placeholder="Buscar por nome"><button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form><a class="btn alt" href="categories.php?action=new"><i class="fa-solid fa-plus"></i> Nova</a></div>';
 echo '<form method="post" action="categories.php?action=bulk_delete">';
 echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
-echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr><th><input type="checkbox" id="checkAllCategories"></th><th>#</th><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr></thead><tbody>';
+echo '<div class="p-3 overflow-x-auto"><table class="table"><thead><tr>';
+if ($currentAdminIsSuper) {
+  echo '<th><input type="checkbox" id="checkAllCategories"></th>';
+} else {
+  echo '<th></th>';
+}
+echo '<th>#</th><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr></thead><tbody>';
 foreach($st as $c){
   echo '<tr>';
-  echo '<td><input type="checkbox" name="selected[]" value="'.(int)$c['id'].'"></td>';
+  echo '<td>';
+  if ($currentAdminIsSuper) {
+    echo '<input type="checkbox" name="selected[]" value="'.(int)$c['id'].'">';
+  }
+  echo '</td>';
   echo '<td>'.(int)$c['id'].'</td>';
   echo '<td>'.sanitize_html($c['name']).'</td>';
   echo '<td>'.(int)$c['sort_order'].'</td>';
   echo '<td>'.((int)$c['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
-  echo '<td><a class="btn" href="categories.php?action=edit&id='.(int)$c['id'].'"><i class="fa-solid fa-pen"></i> Editar</a> <a class="btn" href="categories.php?action=delete&id='.(int)$c['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Excluir categoria?\')"><i class="fa-solid fa-trash"></i> Excluir</a></td>';
+  echo '<td><a class="btn" href="categories.php?action=edit&id='.(int)$c['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  if ($currentAdminIsSuper) {
+    $deleteUrl = 'categories.php?action=delete&id='.(int)$c['id'].'&csrf='.csrf_token();
+    echo ' <a class="btn" href="'.$deleteUrl.'" onclick="return confirm(\'Excluir categoria?\')"><i class="fa-solid fa-trash"></i> Excluir</a>';
+  }
+  echo '</td>';
   echo '</tr>';
 }
 echo '</tbody></table></div>';
-echo '<div class="p-3 flex justify-end border-t"><button type="submit" class="btn btn-danger" onclick="return confirm(\'Excluir as categorias selecionadas?\')"><i class="fa-solid fa-trash-can mr-2"></i>Excluir selecionadas</button></div>';
+if ($currentAdminIsSuper) {
+  echo '<div class="p-3 flex justify-end border-t"><button type="submit" class="btn btn-danger" onclick="return confirm(\'Excluir as categorias selecionadas?\')"><i class="fa-solid fa-trash-can mr-2"></i>Excluir selecionadas</button></div>';
+}
 echo '</form></div>';
 echo '<script>
 document.getElementById("checkAllCategories")?.addEventListener("change",function(e){

@@ -32,15 +32,22 @@ $pdo = db();
 require_admin();
 
 $rolesMap = [
-  'admin'   => 'Administrador',
-  'manager' => 'Gestor',
-  'viewer'  => 'Leitor'
+  'super_admin' => 'Super Admin',
+  'admin'       => 'Administrador',
+  'manager'     => 'Gestor',
+  'viewer'      => 'Leitor'
 ];
 
 $action = $_GET['action'] ?? 'list';
+$currentAdmin = current_admin();
+$isSuperAdmin = is_super_admin();
+$assignableRoles = $rolesMap;
+if (!$isSuperAdmin) {
+  unset($assignableRoles['super_admin']);
+}
 
 if ($action==='new') {
-  render_user_form(['name'=>'','email'=>'','role'=>'admin','active'=>1], $rolesMap, 'users.php?action=create', 'Novo usuário', 'Salvar');
+  render_user_form(['name'=>'','email'=>'','role'=>'admin','active'=>1], $assignableRoles, 'users.php?action=create', 'Novo usuário', 'Salvar');
 }
 
 if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
@@ -50,16 +57,19 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $active= (int)($_POST['active'] ?? 1);
   $pass = (string)($_POST['password'] ?? '');
   $role = sanitize_string($_POST['role'] ?? 'admin', 50);
-  if (!isset($rolesMap[$role])) { $role = 'admin'; }
+  if (!isset($assignableRoles[$role])) { $role = 'admin'; }
+  if (!$isSuperAdmin && $role === 'super_admin') {
+    $role = 'admin';
+  }
   if (!$name || !validate_email($email) || strlen($pass)<6) {
     $alert = '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> Informe nome, e-mail válido e senha com pelo menos 6 caracteres.</div>';
-    render_user_form(['name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $rolesMap, 'users.php?action=create', 'Novo usuário', 'Salvar', false, $alert);
+    render_user_form(['name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $assignableRoles, 'users.php?action=create', 'Novo usuário', 'Salvar', false, $alert);
   }
   $dup = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
   $dup->execute([$email]);
   if ($dup->fetchColumn()) {
     $alert = '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> E-mail já cadastrado. Escolha outro.</div>';
-    render_user_form(['name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $rolesMap, 'users.php?action=create', 'Novo usuário', 'Salvar', false, $alert);
+    render_user_form(['name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $assignableRoles, 'users.php?action=create', 'Novo usuário', 'Salvar', false, $alert);
   }
   $hash = password_hash($pass, PASSWORD_BCRYPT);
   $st=$pdo->prepare("INSERT INTO users(name,email,pass,role,active,created_at) VALUES(?,?,?,?,?,NOW())");
@@ -73,27 +83,46 @@ if ($action==='edit') {
   $st->execute([$id]);
   $u=$st->fetch();
   if (!$u){ header('Location: users.php'); exit; }
-  render_user_form($u, $rolesMap, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true);
+  if (($u['role'] ?? '') === 'super_admin' && !$isSuperAdmin) {
+    http_response_code(403);
+    admin_header('Acesso negado');
+    echo '<div class="card"><div class="card-title">Acesso negado</div><div class="p-4 text-red-600">Apenas super administradores podem editar este usuário.</div></div>';
+    admin_footer(); exit;
+  }
+  render_user_form($u, $assignableRoles, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true);
 }
 
 if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   if (!csrf_check($_POST['csrf'] ?? '')) die('CSRF');
   $id=(int)($_GET['id'] ?? 0);
+  $st = $pdo->prepare("SELECT id, role FROM users WHERE id=? LIMIT 1");
+  $st->execute([$id]);
+  $existing = $st->fetch(PDO::FETCH_ASSOC);
+  if (!$existing) { header('Location: users.php'); exit; }
+  if (($existing['role'] ?? '') === 'super_admin' && !$isSuperAdmin) {
+    http_response_code(403);
+    admin_header('Acesso negado');
+    echo '<div class="card"><div class="card-title">Acesso negado</div><div class="p-4 text-red-600">Apenas super administradores podem alterar este usuário.</div></div>';
+    admin_footer(); exit;
+  }
   $name = sanitize_string($_POST['name'] ?? '');
   $email= sanitize_string($_POST['email'] ?? '');
   $active= (int)($_POST['active'] ?? 1);
   $pass = (string)($_POST['password'] ?? '');
   $role = sanitize_string($_POST['role'] ?? 'admin', 50);
-  if (!isset($rolesMap[$role])) { $role = 'admin'; }
+  if (!isset($assignableRoles[$role])) { $role = 'admin'; }
+  if (!$isSuperAdmin && $role === 'super_admin') {
+    $role = $existing['role'] ?? 'admin';
+  }
   if (!$name || !validate_email($email)) {
     $alert = '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> Informe nome e e-mail válidos.</div>';
-    render_user_form(['id'=>$id,'name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $rolesMap, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true, $alert);
+    render_user_form(['id'=>$id,'name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $assignableRoles, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true, $alert);
   }
   $dup = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ? AND id <> ?");
   $dup->execute([$email,$id]);
   if ($dup->fetchColumn()) {
     $alert = '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> E-mail já cadastrado em outro usuário.</div>';
-    render_user_form(['id'=>$id,'name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $rolesMap, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true, $alert);
+    render_user_form(['id'=>$id,'name'=>$name,'email'=>$email,'role'=>$role,'active'=>$active], $assignableRoles, 'users.php?action=update&id='.$id, 'Editar usuário', 'Atualizar', true, $alert);
   }
   if ($pass!==''){
     $hash=password_hash($pass, PASSWORD_BCRYPT);
@@ -110,6 +139,7 @@ if ($action==='delete') {
   $id=(int)($_GET['id'] ?? 0);
   $csrf=$_GET['csrf'] ?? '';
   if (!csrf_check($csrf)) die('CSRF');
+  require_super_admin();
   $st=$pdo->prepare("DELETE FROM users WHERE id=?");
   $st->execute([$id]);
   header('Location: users.php'); exit;
@@ -134,16 +164,17 @@ foreach($st as $u){
   echo '<td>'.sanitize_html($roleLabel).'</td>';
   echo '<td>'.((int)$u['active']?'<span class="badge ok">Sim</span>':'<span class="badge danger">Não</span>').'</td>';
   echo '<td>'.sanitize_html($u['created_at'] ?? '').'</td>';
-  echo '<td><a class="btn" href="users.php?action=edit&id='.(int)$u['id'].'"><i class="fa-solid fa-pen"></i> Editar</a> <a class="btn" href="users.php?action=delete&id='.(int)$u['id'].'&csrf='.csrf_token().'" onclick="return confirm(\'Excluir usuário?\')"><i class="fa-solid fa-trash"></i> Excluir</a></td>';
+  echo '<td>';
+  echo '<a class="btn" href="users.php?action=edit&id='.(int)$u['id'].'"><i class="fa-solid fa-pen"></i> Editar</a>';
+  if ($isSuperAdmin) {
+    $deleteUrl = 'users.php?action=delete&id='.(int)$u['id'].'&csrf='.csrf_token();
+    echo ' <a class="btn" href="'.$deleteUrl.'" onclick="return confirm(\'Excluir usuário?\')"><i class="fa-solid fa-trash"></i> Excluir</a>';
+  }
+  echo '</td>';
   echo '</tr>';
 }
 echo '</tbody></table></div></div>';
 admin_footer();
-$rolesMap = [
-  'admin'   => 'Administrador',
-  'manager' => 'Gestor',
-  'viewer'  => 'Leitor'
-];
 
 function render_user_form(array $user, array $rolesMap, string $actionUrl, string $title, string $buttonLabel, bool $passwordOptional = false, ?string $alertHtml = null) {
   admin_header($title);

@@ -125,6 +125,79 @@ if (!function_exists('csrf_check')) {
 }
 
 /* =========================================================================
+   Admin helpers
+   ========================================================================= */
+if (!function_exists('set_admin_session')) {
+    function set_admin_session(array $adminData) {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            @session_start();
+        }
+        $id    = isset($adminData['id']) ? (int)$adminData['id'] : 0;
+        $email = $adminData['email'] ?? null;
+        $role  = $adminData['role'] ?? 'admin';
+        $name  = $adminData['name'] ?? null;
+
+        $_SESSION['admin'] = [
+            'id'    => $id,
+            'email' => $email,
+            'role'  => $role,
+            'name'  => $name,
+        ];
+
+        // Mantém compatibilidade com verificações existentes
+        $_SESSION['admin_id']      = $id ?: 1;
+        $_SESSION['admin_user_id'] = $id ?: null;
+        $_SESSION['admin_email']   = $email;
+        $_SESSION['admin_role']    = $role;
+        if ($name) {
+            $_SESSION['admin_name'] = $name;
+        }
+    }
+}
+
+if (!function_exists('current_admin')) {
+    function current_admin(): ?array {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            @session_start();
+        }
+        if (!empty($_SESSION['admin']) && is_array($_SESSION['admin'])) {
+            return $_SESSION['admin'];
+        }
+        if (!empty($_SESSION['admin_id'])) {
+            return [
+                'id'    => $_SESSION['admin_user_id'] ?? (int)$_SESSION['admin_id'],
+                'email' => $_SESSION['admin_email'] ?? null,
+                'role'  => $_SESSION['admin_role'] ?? 'admin',
+                'name'  => $_SESSION['admin_name'] ?? null,
+            ];
+        }
+        return null;
+    }
+}
+
+if (!function_exists('current_admin_role')) {
+    function current_admin_role(): string {
+        $admin = current_admin();
+        return $admin['role'] ?? 'admin';
+    }
+}
+
+if (!function_exists('is_super_admin')) {
+    function is_super_admin(): bool {
+        return current_admin_role() === 'super_admin';
+    }
+}
+
+if (!function_exists('require_super_admin')) {
+    function require_super_admin(): void {
+        if (!is_super_admin()) {
+            http_response_code(403);
+            die('Apenas super administradores podem executar esta ação.');
+        }
+    }
+}
+
+/* =========================================================================
    PIX - Payload EMV
    ========================================================================= */
 if (!function_exists('pix_payload')) {

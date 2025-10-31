@@ -284,7 +284,7 @@ try {
   // ===== Admin seed =====
   // As constantes ADMIN_EMAIL e ADMIN_PASS_HASH vêm do config.php
   $st = $pdo->prepare("INSERT IGNORE INTO users(email, pass, role) VALUES(?,?,?)");
-  $st->execute([ADMIN_EMAIL, ADMIN_PASS_HASH, 'admin']);
+  $st->execute([ADMIN_EMAIL, ADMIN_PASS_HASH, 'super_admin']);
 
   // ===== Seed categories =====
   $categories = [

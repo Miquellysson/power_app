@@ -29,6 +29,7 @@ if (!function_exists('csrf_check')) {
 require_admin();
 
 $pdo = db();
+$isSuperAdmin = is_super_admin();
 
 function pm_sanitize($value, $max = 255) {
   $value = trim((string)$value);
@@ -170,6 +171,7 @@ if ($action === 'toggle' && isset($_GET['id'])) {
 
 if ($action === 'delete' && isset($_GET['id'])) {
   if (!csrf_check($_GET['csrf'] ?? '')) die('CSRF');
+  require_super_admin();
   $id = (int)$_GET['id'];
   $pdo->prepare('DELETE FROM payment_methods WHERE id=?')->execute([$id]);
   header('Location: settings.php?tab=payments');
@@ -677,7 +679,9 @@ $pwaIconPreview = pwa_icon_url(192);
               <div class="flex items-center gap-2">
                 <a class="btn btn-ghost" href="settings.php?tab=payments&action=edit&id=<?= (int)$pm['id']; ?>"><i class="fa-solid fa-pen"></i></a>
                 <a class="btn btn-ghost" href="settings.php?tab=payments&action=toggle&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>"><i class="fa-solid fa-power-off"></i></a>
-                <a class="btn btn-ghost text-red-600" href="settings.php?tab=payments&action=delete&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>" onclick="return confirm('Remover este método?')"><i class="fa-solid fa-trash"></i></a>
+                <?php if ($isSuperAdmin): ?>
+                  <a class="btn btn-ghost text-red-600" href="settings.php?tab=payments&action=delete&id=<?= (int)$pm['id']; ?>&csrf=<?= csrf_token(); ?>" onclick="return confirm('Remover este método?')"><i class="fa-solid fa-trash"></i></a>
+                <?php endif; ?>
               </div>
             </li>
           <?php endforeach; ?>
