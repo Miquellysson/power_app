@@ -9,6 +9,7 @@
 - Campo `products.stripe_payment_link` criado para permitir checkout direto via Stripe por produto.
 - Campo `products.price_compare` adicionado para habilitar exibição de ofertas no formato **de X por Y**.
 - Novas chaves em `settings`: `home_featured_enabled`, `home_featured_title` e `home_featured_subtitle` para controlar a vitrine de destaques na home.
+- Campo `footer_copy` permite personalizar o texto de rodapé com placeholders (`{{year}}`, `{{store_name}}`).
 - Templates de e-mail (cliente/admin) passaram a ser configuráveis via painel (`email_customer_*` e `email_admin_*`).
 - Criada tabela `page_layouts` para armazenar rascunhos/publicações do editor visual da home.
 - Criada tabela `payment_methods` para gerenciar métodos de pagamento dinâmicos via painel.
@@ -23,6 +24,7 @@
    - Provisiona a tabela `payment_methods` e popula com Pix/Zelle/Venmo/PayPal/Square caso esteja vazia.
    - Semeia as preferências da vitrine de destaques (`home_featured_*`) com valores padrão e mantém desativada até habilitar no painel.
    - Popula os templates de e-mail (`email_customer_*` e `email_admin_*`) com mensagens padrão personalizáveis.
+   - Adiciona o texto padrão de rodapé (`footer_copy`) usando placeholders dinâmicos.
 
 ## Link de acompanhamento
 - Depois do pedido, o cliente verá o link.

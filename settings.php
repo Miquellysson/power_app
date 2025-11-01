@@ -356,6 +356,12 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   setting_set('home_featured_title', $featuredTitle);
   setting_set('home_featured_subtitle', $featuredSubtitle);
 
+  $footerCopy = pm_clip_text($_POST['footer_copy'] ?? '', 280);
+  if ($footerCopy === '') {
+    $footerCopy = '© {{year}} '.($storeName ?: 'Sua Loja').'. Todos os direitos reservados.';
+  }
+  setting_set('footer_copy', $footerCopy);
+
   $emailDefaultSet = email_template_defaults($storeName ?: (cfg()['store']['name'] ?? 'Sua Loja'));
   $emailCustomerSubject = pm_sanitize($_POST['email_customer_subject'] ?? '', 180);
   if ($emailCustomerSubject === '') {
@@ -564,6 +570,7 @@ $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma 
 $headerSublineCurrent = setting_get('header_subline', 'Farmácia Online');
 $footerTitleCurrent = setting_get('footer_title', 'FarmaFixed');
 $footerDescriptionCurrent = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+$footerCopyCurrent = setting_get('footer_copy', '© {{year}} '.($storeNameCurrent ?: 'Sua Loja').'. Todos os direitos reservados.');
 $themeColorCurrent = setting_get('theme_color', '#2060C8');
 $heroBackgroundCurrent = setting_get('hero_background', 'gradient');
 $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
@@ -642,6 +649,11 @@ $pwaIconPreview = pwa_icon_url(192);
         <div>
           <label class="block text-sm font-medium mb-1">Descrição do rodapé</label>
           <textarea class="textarea w-full" name="footer_description" rows="2" maxlength="160"><?= sanitize_html($footerDescriptionCurrent); ?></textarea>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Texto do rodapé</label>
+          <textarea class="textarea w-full font-mono text-sm" name="footer_copy" rows="2" maxlength="280"><?= sanitize_html($footerCopyCurrent); ?></textarea>
+          <p class="hint mt-1">Suporta placeholders <code>{{year}}</code> e <code>{{store_name}}</code>. Ex.: “© {{year}} {{store_name}}. Todos os direitos reservados.”</p>
         </div>
       </div>
 

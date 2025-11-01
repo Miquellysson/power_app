@@ -473,7 +473,12 @@ function app_footer() {
   echo '      </div>';
   echo '    </div>';
   echo '  </div>';
-  echo '  <div class="text-center text-xs text-gray-500 py-4 border-t">&copy; '.date('Y').' FarmaFixed. Todos os direitos reservados.</div>';
+  $footerCopyTpl = setting_get('footer_copy', '© {{year}} '.$store_name.'. Todos os direitos reservados.');
+  $footerCopyText = strtr($footerCopyTpl, [
+    '{{year}}' => date('Y'),
+    '{{store_name}}' => $store_name,
+  ]);
+  echo '  <div class="text-center text-xs text-gray-500 py-4 border-t">'.sanitize_html($footerCopyText).'</div>';
   echo '</footer>';
   $whats = whatsapp_widget_config();
   if ($whats) {

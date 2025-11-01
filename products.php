@@ -37,6 +37,8 @@ if (!function_exists('validate_email')){
 $pdo = db();
 require_admin();
 
+ensure_products_schema($pdo);
+
 $action = $_GET['action'] ?? 'list';
 $canManageProducts = admin_can('manage_products');
 $writeActions = ['new','create','edit','update','delete','destroy','bulk_destroy','import'];
@@ -56,6 +58,31 @@ function products_take_flash(): ?array {
   $flash = $_SESSION['products_flash'] ?? null;
   unset($_SESSION['products_flash']);
   return $flash;
+}
+
+function ensure_products_schema(PDO $pdo): void {
+  static $checked = false;
+  if ($checked) {
+    return;
+  }
+  $checked = true;
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM products");
+    $hasPriceCompare = false;
+    if ($cols) {
+      while ($col = $cols->fetch(PDO::FETCH_ASSOC)) {
+        if (isset($col['Field']) && $col['Field'] === 'price_compare') {
+          $hasPriceCompare = true;
+          break;
+        }
+      }
+    }
+    if (!$hasPriceCompare) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN price_compare DECIMAL(10,2) NULL AFTER price");
+    }
+  } catch (Throwable $e) {
+    // Ignora: se a coluna já existir ou permissão negada, apenas seguimos sem interromper
+  }
 }
 
 function categories_options($pdo, $current=0){
@@ -486,6 +513,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
+  if ($category_id <= 0) {
+    $category_id = null;
+  }
   $description = sanitize_string($_POST['description'] ?? '', 2000);
   $active = (int)($_POST['active'] ?? 1);
   $featured = (int)($_POST['featured'] ?? 0);
@@ -617,6 +647,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   if ($shipping_cost < 0) $shipping_cost = 0;
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
+  if ($category_id <= 0) {
+    $category_id = null;
+  }
   $description = sanitize_string($_POST['description'] ?? '', 2000);
   $active = (int)($_POST['active'] ?? 1);
   $featured = (int)($_POST['featured'] ?? 0);

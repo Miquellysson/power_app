@@ -297,7 +297,27 @@ try {
     error_log('Falha ao gerar track_token: ' . $e->getMessage());
   }
   try {
-    $storeNameDefault = 'Victor Farma Fácil';
+    $existingSettings = [];
+    try {
+      $rows = $pdo->query("SELECT skey, svalue FROM settings");
+      if ($rows) {
+        foreach ($rows as $row) {
+          if (isset($row['skey'])) {
+            $existingSettings[$row['skey']] = $row['svalue'] ?? '';
+          }
+        }
+      }
+    } catch (Throwable $e) {}
+
+    $storeCfg = $configData['store'] ?? [];
+    $storeNameDefault = $existingSettings['store_name'] ?? ($storeCfg['name'] ?? 'Farma Fácil');
+    $storeEmailDefault = $existingSettings['store_email'] ?? ($storeCfg['support_email'] ?? 'contato@example.com');
+    $storePhoneDefault = $existingSettings['store_phone'] ?? ($storeCfg['phone'] ?? '(00) 00000-0000');
+    $storeAddressDefault = $existingSettings['store_address'] ?? ($storeCfg['address'] ?? 'Endereço não configurado');
+    $footerDescriptionDefault = $existingSettings['footer_description'] ?? 'Sua farmácia online com experiência de app.';
+    $footerCopyDefault = $existingSettings['footer_copy'] ?? '© {{year}} '.$storeNameDefault.'. Todos os direitos reservados.';
+    $themeColorDefault = $existingSettings['theme_color'] ?? '#2060C8';
+
     $emailCustomerSubjectDefault = "Seu pedido {{order_id}} foi recebido - {$storeNameDefault}";
     $emailCustomerBodyDefault = <<<HTML
 <p>Olá {{customer_name}},</p>
@@ -327,16 +347,17 @@ HTML;
 
     $settingsDefaults = [
       'store_name'            => $storeNameDefault,
-      'store_email'           => 'contato@farmafacil.com',
-      'store_phone'           => '(82) 99999-9999',
-      'store_address'         => 'Maceió, Alagoas, Brasil',
+      'store_email'           => $storeEmailDefault,
+      'store_phone'           => $storePhoneDefault,
+      'store_address'         => $storeAddressDefault,
       'store_meta_title'      => $storeNameDefault.' | Loja',
       'home_hero_title'       => 'Tudo para sua saúde',
       'home_hero_subtitle'    => 'Experiência de app, rápida e segura.',
       'header_subline'        => 'Farmácia Online',
       'footer_title'          => $storeNameDefault,
-      'footer_description'    => 'Sua farmácia online com experiência de app.',
-      'theme_color'           => '#2060C8',
+      'footer_description'    => $footerDescriptionDefault,
+      'footer_copy'           => $footerCopyDefault,
+      'theme_color'           => $themeColorDefault,
       'whatsapp_button_text'  => 'Fale com a gente',
       'whatsapp_message'      => 'Olá! Gostaria de tirar uma dúvida sobre os produtos.',
       'store_currency'        => 'USD',
