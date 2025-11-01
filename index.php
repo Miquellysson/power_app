@@ -1356,6 +1356,7 @@ if ($route === 'checkout') {
   echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-lock mr-2 text-brand-600"></i>'.htmlspecialchars($d['checkout'] ?? 'Finalizar Compra').'</h2>';
   echo '  <form id="checkout-form" method="post" action="?route=place_order" enctype="multipart/form-data" class="grid lg:grid-cols-2 gap-6">';
   echo '    <input type="hidden" name="csrf" value="'.csrf_token().'">';
+  echo '    <input type="hidden" name="square_option" id="square_option_input" value="">';
 
   // Coluna 1 — Dados
   echo '    <div class="space-y-4">';
@@ -1382,8 +1383,10 @@ if ($route === 'checkout') {
     foreach ($paymentMethods as $pm) {
       $code = htmlspecialchars($pm['code']);
       $label = htmlspecialchars($pm['name']);
+      $settings = $pm['settings'] ?? [];
+      $payType = $settings['type'] ?? $pm['code'];
       $icon = 'fa-credit-card';
-      switch ($pm['settings']['type'] ?? $pm['code']) {
+      switch ($payType) {
         case 'pix': $icon = 'fa-qrcode'; break;
         case 'zelle': $icon = 'fa-university'; break;
         case 'venmo': $icon = 'fa-mobile-screen-button'; break;
@@ -1406,18 +1409,74 @@ if ($route === 'checkout') {
     foreach ($paymentMethods as $pm) {
       $code = htmlspecialchars($pm['code']);
       $settings = $pm['settings'] ?? [];
+      $payType = $settings['type'] ?? $pm['code'];
       $accountLabel = htmlspecialchars($settings['account_label'] ?? '');
       $accountValue = htmlspecialchars($settings['account_value'] ?? '');
       $placeholders = payment_placeholders($pm, $total);
       $instructionsHtml = render_payment_instructions($pm['instructions'] ?? '', $placeholders);
-      echo '  <div data-payment-info="'.$code.'" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700">';
-      if ($accountLabel || $accountValue) {
-        echo '    <p class="mb-2"><strong>'.$accountLabel.'</strong>: '.$accountValue.'</p>';
+
+      if ($payType === 'square') {
+        $squareOptions = [];
+        $squareOptions['credit'] = [
+          'key' => 'credit',
+          'label' => $settings['credit_label'] ?? 'Cartão de crédito',
+          'link' => $settings['credit_link'] ?? ''
+        ];
+        $squareOptions['debit'] = [
+          'key' => 'debit',
+          'label' => $settings['debit_label'] ?? 'Cartão de débito',
+          'link' => $settings['debit_link'] ?? ''
+        ];
+        $squareOptions['afterpay'] = [
+          'key' => 'afterpay',
+          'label' => $settings['afterpay_label'] ?? 'Afterpay',
+          'link' => $settings['afterpay_link'] ?? ''
+        ];
+        $squareOptions = array_filter($squareOptions, function ($opt) {
+          return !empty($opt['link']);
+        });
+
+        $badgeTitle = htmlspecialchars($settings['badge_title'] ?? '', ENT_QUOTES, 'UTF-8');
+        $badgeText = htmlspecialchars($settings['badge_text'] ?? '', ENT_QUOTES, 'UTF-8');
+        echo '  <div data-payment-info="'.$code.'" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700 space-y-4">';
+        if ($instructionsHtml !== '') {
+          echo '    <div>'.$instructionsHtml.'</div>';
+        }
+        if ($badgeTitle !== '' || $badgeText !== '') {
+          echo '    <div class="p-4 bg-white/80 border border-brand-100 rounded-xl text-left">';
+          if ($badgeTitle !== '') {
+            echo '      <div class="text-brand-700 font-semibold text-base">'.$badgeTitle.'</div>';
+          }
+          if ($badgeText !== '') {
+            echo '      <div class="text-xs text-gray-600 mt-1">'.$badgeText.'</div>';
+          }
+          echo '    </div>';
+        }
+        echo '    <div class="grid sm:grid-cols-3 gap-3 square-option-grid" data-square-options="'.$code.'">';
+        if ($squareOptions) {
+          foreach ($squareOptions as $opt) {
+            $optLabel = htmlspecialchars($opt['label'] ?? '', ENT_QUOTES, 'UTF-8');
+            $optKey = htmlspecialchars($opt['key'], ENT_QUOTES, 'UTF-8');
+            echo '      <button type="button" class="square-option-card border rounded-xl bg-white text-brand-700 px-4 py-3 flex flex-col items-start gap-1" data-square-option="'.$optKey.'">';
+            echo '        <span class="text-sm font-semibold">'.$optLabel.'</span>';
+            echo '        <span class="text-xs text-gray-500">Clique para pagar com '.$optLabel.'.</span>';
+            echo '      </button>';
+          }
+        } else {
+          echo '      <div class="text-sm text-gray-600">Configure os links do Square nas opções do painel.</div>';
+        }
+        echo '    </div>';
+        echo '  </div>';
+      } else {
+        echo '  <div data-payment-info="'.$code.'" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700">';
+        if ($accountLabel || $accountValue) {
+          echo '    <p class="mb-2"><strong>'.$accountLabel.'</strong>: '.$accountValue.'</p>';
+        }
+        if ($instructionsHtml !== '') {
+          echo '    <p>'.$instructionsHtml.'</p>';
+        }
+        echo '  </div>';
       }
-      if ($instructionsHtml !== '') {
-        echo '    <p>'.$instructionsHtml.'</p>';
-      }
-      echo '  </div>';
       if (!empty($pm['require_receipt'])) {
         echo '  <div data-payment-receipt="'.$code.'" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">';
         echo '    <label class="block text-sm font-medium mb-2">Enviar Comprovante (JPG/PNG/PDF)</label>';
@@ -1492,8 +1551,25 @@ echo '      </div>';
   echo "<script>
     (function(){
       const paymentRadios = document.querySelectorAll(\"input[name='payment']\");
+      const style = document.createElement('style');
+      style.innerHTML = '.square-option-card{transition:all .2s ease;border:1px solid rgba(32,96,200,.2);} .square-option-card:hover{border-color:rgba(32,96,200,.6);transform:translateY(-2px);} .square-option-card.selected{border-color:rgba(32,96,200,1);background:rgba(255,255,255,0.95);box-shadow:0 10px 25px -12px rgba(32,96,200,.7);}';
+      document.head.appendChild(style);
       const infoBlocks = document.querySelectorAll('[data-payment-info]');
       const receiptBlocks = document.querySelectorAll('[data-payment-receipt]');
+      const squareOptionInput = document.getElementById('square_option_input');
+
+      function resetSquareSelection() {
+        document.querySelectorAll('.square-option-card.selected').forEach(btn => btn.classList.remove('selected'));
+        if (squareOptionInput) squareOptionInput.value = '';
+      }
+
+      function selectSquareOption(option, btn) {
+        if (!squareOptionInput) return;
+        resetSquareSelection();
+        squareOptionInput.value = option;
+        if (btn) btn.classList.add('selected');
+      }
+
       paymentRadios.forEach(radio => {
         radio.addEventListener('change', () => {
           document.querySelectorAll('.border-brand-300').forEach(el => el.classList.remove('border-brand-300'));
@@ -1501,11 +1577,27 @@ echo '      </div>';
           if (card) card.classList.add('border-brand-300');
           const code = radio.dataset.code;
           infoBlocks.forEach(block => {
-            block.classList.toggle('hidden', block.getAttribute('data-payment-info') !== code);
+            const show = block.getAttribute('data-payment-info') === code;
+            block.classList.toggle('hidden', !show);
+            if (show && code === 'square') {
+              const firstBtn = block.querySelector('.square-option-card');
+              if (firstBtn) {
+                selectSquareOption(firstBtn.dataset.squareOption, firstBtn);
+              }
+            }
           });
           receiptBlocks.forEach(block => {
             block.classList.toggle('hidden', block.getAttribute('data-payment-receipt') !== code);
           });
+          if (code !== 'square') {
+            resetSquareSelection();
+          }
+        });
+      });
+
+      document.querySelectorAll('.square-option-card').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectSquareOption(btn.dataset.squareOption, btn);
         });
       });
 
@@ -1600,26 +1692,51 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $squareRedirectUrl = null;
   $squareWarning = null;
+  $squareSelectedOption = sanitize_string(trim((string)($_POST['square_option'] ?? '')), 20);
   $squareOpenNewTab = !empty($methodSettings['open_new_tab']);
-  if ($methodType === 'square' && ($methodSettings['mode'] ?? 'square_product_link') === 'square_product_link') {
-    $squareLinks = [];
-    $squareMissing = [];
-    foreach ($items as $itemInfo) {
-      $link = $itemInfo['square_link'] ?? '';
-      if ($link === '') {
-        $squareMissing[] = $itemInfo['name'];
-      } else {
-        $squareLinks[$link] = true;
+  $squareMode = $methodSettings['mode'] ?? 'square_product_link';
+  $squareOptionMap = [];
+  if ($methodType === 'square') {
+    $squareOptionMap = array_filter([
+      'credit'   => ['label' => $methodSettings['credit_label'] ?? 'Cartão de crédito', 'link' => $methodSettings['credit_link'] ?? ''],
+      'debit'    => ['label' => $methodSettings['debit_label'] ?? 'Cartão de débito', 'link' => $methodSettings['debit_link'] ?? ''],
+      'afterpay' => ['label' => $methodSettings['afterpay_label'] ?? 'Afterpay', 'link' => $methodSettings['afterpay_link'] ?? ''],
+    ], function ($opt) {
+      return !empty($opt['link']);
+    });
+
+    if ($squareOptionMap) {
+      if ($squareSelectedOption === '' || empty($squareOptionMap[$squareSelectedOption])) {
+        $firstKey = array_key_first($squareOptionMap);
+        $squareSelectedOption = $firstKey ?: '';
       }
-    }
-    if (!empty($squareMissing)) {
-      $cleanNames = array_map(function($name){ return sanitize_string($name ?? '', 80); }, $squareMissing);
-      $squareWarning = 'Pagamento Square pendente para: '.implode(', ', $cleanNames);
-    } elseif (count($squareLinks) > 1) {
-      $squareWarning = 'Mais de um link Square encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
-    } elseif (!empty($squareLinks)) {
-      $keys = array_keys($squareLinks);
-      $squareRedirectUrl = $keys[0];
+      if ($squareSelectedOption !== '' && !empty($squareOptionMap[$squareSelectedOption]['link'])) {
+        $squareRedirectUrl = $squareOptionMap[$squareSelectedOption]['link'];
+      } else {
+        $squareWarning = 'Configuração do Square incompleta. Informe os links no painel.';
+      }
+    } elseif ($squareMode === 'direct_url' && !empty($methodSettings['redirect_url'])) {
+      $squareRedirectUrl = $methodSettings['redirect_url'];
+    } elseif ($squareMode === 'square_product_link') {
+      $squareLinks = [];
+      $squareMissing = [];
+      foreach ($items as $itemInfo) {
+        $link = $itemInfo['square_link'] ?? '';
+        if ($link === '') {
+          $squareMissing[] = $itemInfo['name'];
+        } else {
+          $squareLinks[$link] = true;
+        }
+      }
+      if (!empty($squareMissing)) {
+        $cleanNames = array_map(function($name){ return sanitize_string($name ?? '', 80); }, $squareMissing);
+        $squareWarning = 'Pagamento Square pendente para: '.implode(', ', $cleanNames);
+      } elseif (count($squareLinks) > 1) {
+        $squareWarning = 'Mais de um link Square encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
+      } elseif (!empty($squareLinks)) {
+        $keys = array_keys($squareLinks);
+        $squareRedirectUrl = $keys[0];
+      }
     }
   }
 
@@ -1686,11 +1803,16 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       break;
     case 'square':
-      $mode = $methodSettings['mode'] ?? 'square_product_link';
-      if ($mode === 'square_product_link') {
-        $payRef = $squareRedirectUrl ?: 'SQUARE:pendente';
-      } elseif (!empty($methodSettings['redirect_url'])) {
-        $payRef = $methodSettings['redirect_url'];
+      if (!empty($squareOptionMap) && $squareSelectedOption !== '' && !empty($squareOptionMap[$squareSelectedOption]['label'])) {
+        $payRef = 'SQUARE:'.$squareOptionMap[$squareSelectedOption]['label'];
+      } else {
+        if ($squareRedirectUrl) {
+          $payRef = $squareRedirectUrl;
+        } elseif (!empty($methodSettings['redirect_url'])) {
+          $payRef = $methodSettings['redirect_url'];
+        } else {
+          $payRef = 'SQUARE:pendente';
+        }
       }
       break;
     case 'stripe':
@@ -1707,8 +1829,8 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 
   if ($methodType === 'square') {
-    if ($squareRedirectUrl === null || $squareRedirectUrl === '' || $squareWarning) {
-      $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link Square para estes produtos. Escolha outra forma de pagamento.';
+    if ($squareWarning || !$squareRedirectUrl) {
+      $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link Square configurado. Escolha outra forma de pagamento.';
       header('Location: ?route=checkout');
       exit;
     }
@@ -1801,8 +1923,9 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       $_SESSION['square_redirect_url'] = $squareRedirectUrl;
       $_SESSION['square_redirect_warning'] = $squareWarning;
       $_SESSION['square_open_new_tab'] = $squareOpenNewTab ? 1 : 0;
+      $_SESSION['square_option_label'] = (!empty($squareOptionMap) && $squareSelectedOption !== '') ? ($squareOptionMap[$squareSelectedOption]['label'] ?? '') : '';
     } else {
-      unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab']);
+      unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['square_option_label']);
     }
     if ($methodType === 'stripe') {
       $_SESSION['stripe_redirect_url'] = $stripeRedirectUrl;
@@ -1838,10 +1961,11 @@ if ($route === 'order_success') {
   $squareRedirectSession = $_SESSION['square_redirect_url'] ?? null;
   $squareWarningSession = $_SESSION['square_redirect_warning'] ?? null;
   $squareOpenNewTabSession = !empty($_SESSION['square_open_new_tab']);
+  $squareOptionLabelSession = $_SESSION['square_option_label'] ?? '';
   $stripeRedirectSession = $_SESSION['stripe_redirect_url'] ?? null;
   $stripeWarningSession = $_SESSION['stripe_redirect_warning'] ?? null;
   $stripeOpenNewTabSession = !empty($_SESSION['stripe_open_new_tab']);
-  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
+  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['square_option_label'], $_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
 
   echo '<section class="max-w-3xl mx-auto px-4 py-16 text-center">';
   echo '  <div class="bg-white rounded-2xl shadow p-8">';
@@ -1854,8 +1978,9 @@ if ($route === 'order_success') {
   if (!empty($squareRedirectSession)) {
     $safeSquare = htmlspecialchars($squareRedirectSession, ENT_QUOTES, "UTF-8");
     $squareJs = json_encode($squareRedirectSession, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+    $squareLabelNote = $squareOptionLabelSession ? ' ('.$squareOptionLabelSession.')' : '';
     echo '    <div class="mt-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
-    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Redirecionando para o pagamento Square... Caso não avance automaticamente, <a class="underline" href="'.$safeSquare.'">clique aqui</a>.';
+    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Redirecionando para o pagamento Square'.$squareLabelNote.'... Caso não avance automaticamente, <a class="underline" href="'.$safeSquare.'">clique aqui</a>.';
     echo '    </div>';
     echo '    <script>
       window.addEventListener("load", function(){

@@ -100,6 +100,14 @@ function pm_collect_settings($type, array $data) {
       $settings['mode'] = pm_sanitize($data['square_mode'] ?? 'square_product_link', 60);
       $settings['open_new_tab'] = !empty($data['square_open_new_tab']);
       $settings['redirect_url'] = pm_sanitize($data['square_redirect_url'] ?? '', 255);
+      $settings['badge_title'] = pm_sanitize($data['square_badge_title'] ?? 'Seleção especial', 120);
+      $settings['badge_text'] = pm_sanitize($data['square_badge_text'] ?? 'Selecionados com carinho para você', 240);
+      $settings['credit_label'] = pm_sanitize($data['square_credit_label'] ?? 'Cartão de crédito', 80);
+      $settings['credit_link'] = pm_sanitize($data['square_credit_link'] ?? '', 255);
+      $settings['debit_label'] = pm_sanitize($data['square_debit_label'] ?? 'Cartão de débito', 80);
+      $settings['debit_link'] = pm_sanitize($data['square_debit_link'] ?? '', 255);
+      $settings['afterpay_label'] = pm_sanitize($data['square_afterpay_label'] ?? 'Afterpay', 80);
+      $settings['afterpay_link'] = pm_sanitize($data['square_afterpay_link'] ?? '', 255);
       break;
     case 'stripe':
       $settings['mode'] = pm_sanitize($data['stripe_mode'] ?? 'stripe_product_link', 60);
@@ -993,6 +1001,36 @@ $pwaIconPreview = pwa_icon_url(192);
           <div data-type="square">
             <label class="block text-sm font-medium mb-1">URL fixa (opcional)</label>
             <input class="input w-full" name="square_redirect_url" value="<?= sanitize_html($formSettings['redirect_url'] ?? ''); ?>" placeholder="https://">
+          </div>
+          <div data-type="square" class="md:col-span-2 grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Título (H1)</label>
+              <input class="input w-full" name="square_badge_title" value="<?= sanitize_html($formSettings['badge_title'] ?? 'Seleção especial'); ?>" placeholder="Seleção especial">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Texto complementar</label>
+              <input class="input w-full" name="square_badge_text" value="<?= sanitize_html($formSettings['badge_text'] ?? 'Selecionados com carinho para você'); ?>" placeholder="Selecionados com carinho para você">
+            </div>
+          </div>
+          <div data-type="square" class="md:col-span-2 grid md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Crédito - rótulo</label>
+              <input class="input w-full" name="square_credit_label" value="<?= sanitize_html($formSettings['credit_label'] ?? 'Cartão de crédito'); ?>">
+              <label class="block text-xs font-medium mt-2">Crédito - link Square</label>
+              <input class="input w-full" name="square_credit_link" value="<?= sanitize_html($formSettings['credit_link'] ?? ''); ?>" placeholder="https://square.link/...">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Débito - rótulo</label>
+              <input class="input w-full" name="square_debit_label" value="<?= sanitize_html($formSettings['debit_label'] ?? 'Cartão de débito'); ?>">
+              <label class="block text-xs font-medium mt-2">Débito - link Square</label>
+              <input class="input w-full" name="square_debit_link" value="<?= sanitize_html($formSettings['debit_link'] ?? ''); ?>" placeholder="https://square.link/...">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Afterpay - rótulo</label>
+              <input class="input w-full" name="square_afterpay_label" value="<?= sanitize_html($formSettings['afterpay_label'] ?? 'Afterpay'); ?>">
+              <label class="block text-xs font-medium mt-2">Afterpay - link Square</label>
+              <input class="input w-full" name="square_afterpay_link" value="<?= sanitize_html($formSettings['afterpay_link'] ?? ''); ?>" placeholder="https://square.link/...">
+            </div>
           </div>
 
           <div data-type="stripe">
