@@ -22,8 +22,14 @@ function admin_header($title='Admin'){
       '800' => '#17448E',
       '900' => '#10326A',
   ];
-  $brandPalette = function_exists('generate_brand_palette') ? generate_brand_palette($themeColor) : $defaultPalette;
-  $brandPalette = array_merge($defaultPalette, $brandPalette);
+  $brandPaletteGenerated = function_exists('generate_brand_palette') ? generate_brand_palette($themeColor) : [];
+  $normalizedPalette = [];
+  if (is_array($brandPaletteGenerated)) {
+    foreach ($brandPaletteGenerated as $k => $v) {
+      $normalizedPalette[(string)$k] = $v;
+    }
+  }
+  $brandPalette = array_replace($defaultPalette, $normalizedPalette);
   $accentColor = function_exists('adjust_color_brightness') ? adjust_color_brightness($themeColor, 0.35) : '#4F88FF';
   $tailwindBrandJson = json_encode($brandPalette, JSON_UNESCAPED_SLASHES);
   $accentPaletteJson = json_encode(['400' => $accentColor], JSON_UNESCAPED_SLASHES);

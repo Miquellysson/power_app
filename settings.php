@@ -42,6 +42,14 @@ function pm_sanitize($value, $max = 255) {
   return $value;
 }
 
+function pm_clip_text($value, $max = 8000) {
+  $value = (string)$value;
+  if (mb_strlen($value) > $max) {
+    $value = mb_substr($value, 0, $max);
+  }
+  return $value;
+}
+
 function pm_slug($text) {
   $text = strtolower($text);
   $text = preg_replace('/[^a-z0-9\-]+/i', '-', $text);
@@ -355,7 +363,7 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   }
   setting_set('email_customer_subject', $emailCustomerSubject);
 
-  $emailCustomerBody = pm_sanitize($_POST['email_customer_body'] ?? '', 8000);
+  $emailCustomerBody = pm_clip_text($_POST['email_customer_body'] ?? '', 8000);
   if ($emailCustomerBody === '') {
     $emailCustomerBody = $emailDefaultSet['customer_body'];
   }
@@ -367,7 +375,7 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   }
   setting_set('email_admin_subject', $emailAdminSubject);
 
-  $emailAdminBody = pm_sanitize($_POST['email_admin_body'] ?? '', 8000);
+  $emailAdminBody = pm_clip_text($_POST['email_admin_body'] ?? '', 8000);
   if ($emailAdminBody === '') {
     $emailAdminBody = $emailDefaultSet['admin_body'];
   }
