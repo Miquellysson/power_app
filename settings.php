@@ -346,15 +346,20 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $featuredEnabled = isset($_POST['home_featured_enabled']) ? '1' : '0';
   $featuredTitle = pm_sanitize($_POST['home_featured_title'] ?? '', 80);
   $featuredSubtitle = pm_sanitize($_POST['home_featured_subtitle'] ?? '', 200);
+  $featuredBadge = pm_sanitize($_POST['home_featured_badge'] ?? '', 120);
   if ($featuredTitle === '') {
     $featuredTitle = 'Ofertas em destaque';
   }
   if ($featuredSubtitle === '') {
     $featuredSubtitle = 'Seleção especial com preços imperdíveis.';
   }
+  if ($featuredBadge === '') {
+    $featuredBadge = 'Selecionados com carinho para você';
+  }
   setting_set('home_featured_enabled', $featuredEnabled);
   setting_set('home_featured_title', $featuredTitle);
   setting_set('home_featured_subtitle', $featuredSubtitle);
+  setting_set('home_featured_badge', $featuredBadge);
 
   $footerCopy = pm_clip_text($_POST['footer_copy'] ?? '', 280);
   if ($footerCopy === '') {
@@ -558,6 +563,7 @@ admin_header('Configurações');
 $featuredEnabledCurrent = (int)setting_get('home_featured_enabled', '0');
 $featuredTitleCurrent = setting_get('home_featured_title', 'Ofertas em destaque');
 $featuredSubtitleCurrent = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
+$featuredBadgeCurrent = setting_get('home_featured_badge', 'Selecionados com carinho para você');
 $emailDefaults = email_template_defaults($storeNameCurrent ?: ($storeCfg['name'] ?? ''));
 $emailCustomerSubjectCurrent = setting_get('email_customer_subject', $emailDefaults['customer_subject']);
 $emailCustomerBodyCurrent = setting_get('email_customer_body', $emailDefaults['customer_body']);
@@ -677,6 +683,11 @@ $pwaIconPreview = pwa_icon_url(192);
           <label class="block text-sm font-medium mb-1">Descrição de apoio</label>
           <textarea class="textarea w-full" name="home_featured_subtitle" rows="2" maxlength="200"><?= sanitize_html($featuredSubtitleCurrent); ?></textarea>
           <p class="hint mt-1">Ex.: “Seleção especial com preços imperdíveis — de X por Y”.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Texto do selo</label>
+          <input class="input w-full" name="home_featured_badge" maxlength="120" value="<?= sanitize_html($featuredBadgeCurrent); ?>" placeholder="Selecionados com carinho para você">
+          <p class="hint mt-1">Exibido ao lado do título quando a seção está ativa.</p>
         </div>
       </div>
 

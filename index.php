@@ -862,7 +862,10 @@ if ($route === 'home') {
     echo '        <h2 class="text-3xl md:text-4xl font-bold">'.$featuredTitleHtml.'</h2>';
     echo '        <p class="text-white/80 text-base md:text-lg max-w-2xl">'.$featuredSubtitleHtml.'</p>';
     echo '      </div>';
-    echo '      <div class="flex items-center gap-2 text-sm text-white/80"><i class="fa-solid fa-star"></i><span>Habilite ou altere os produtos em Destaque no painel.</span></div>';
+    $featuredBadgeText = setting_get('home_featured_badge', 'Selecionados com carinho para você');
+    if ($featuredBadgeText !== '') {
+      echo '      <div class="flex items-center gap-2 text-sm text-white/80"><i class="fa-solid fa-star"></i><span>'.htmlspecialchars($featuredBadgeText, ENT_QUOTES, 'UTF-8').'</span></div>';
+    }
     echo '    </div>';
     echo '    <div class="flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory" style="-webkit-overflow-scrolling: touch;">';
     foreach ($featuredProducts as $fp) {
