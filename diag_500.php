@@ -8,7 +8,7 @@ error_reporting(E_ALL);
 
 header('Content-Type: text/plain; charset=utf-8');
 
-echo "=== Farma Fácil — Diagnóstico 500 ===\n\n";
+echo "=== Get Power — Diagnóstico 500 ===\n\n";
 
 // 1) Ambiente
 printf("PHP: %s\n", PHP_VERSION);

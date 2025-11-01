@@ -5,7 +5,7 @@ require __DIR__.'/config.php';
 require __DIR__.'/lib/utils.php';
 
 $cfg = function_exists('cfg') ? cfg() : [];
-$storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
+$storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power');
 
 function store_logo_path() {
   $opt = setting_get('store_logo_url');

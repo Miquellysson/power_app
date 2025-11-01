@@ -1,14 +1,14 @@
-# Farma Fácil (MySQL) — MVP
+# Get Power (MySQL) — MVP
 
 **Stack**: Apache + PHP 7.4/8.x + MySQL.  
 **Features**: multilíngue (PT/EN/ES), catálogo, carrinho, checkout com **Zelle (upload comprovante)**, **Venmo**, **Pix** (payload + QR via serviço público), **PayPal**, painel admin (produtos/clientes/pedidos).
 
 ## 1) Instalação
-1. Crie o banco `farma_facil` no MySQL (ou outro nome).
-2. Suba esta pasta para seu Apache (ex.: `/var/www/html/farma-facil-mysql`).
+1. Crie o banco `get_power` no MySQL (ou outro nome).
+2. Suba esta pasta para seu Apache (ex.: `/var/www/html/get-power`).
 3. Ajuste `config.php` com seu host/DB/user/pass (ou use variáveis de ambiente `FF_DB_HOST`, `FF_DB_NAME`, `FF_DB_USER`, `FF_DB_PASS`).
-4. Acesse `http://SEU_HOST/farma-facil-mysql/install.php` uma vez para criar as tabelas e dados demo.
-5. Loja: `index.php` — Painel: `admin.php` (login: `admin@farmafacil.com` / `admin123`). Altere a senha.
+4. Acesse `http://SEU_HOST/get-power/install.php` uma vez para criar as tabelas e dados demo.
+5. Loja: `index.php` — Painel: `admin.php` (defina suas credenciais via variáveis `FF_ADMIN_EMAIL` e `FF_ADMIN_PASS_HASH` ou cadastre manualmente).
 
 ## 2) Pagamentos
 - **Pix**: payload gerado localmente; QR renderizado via `https://api.qrserver.com`. Para QR local, substitua por uma biblioteca PHP QRCode.

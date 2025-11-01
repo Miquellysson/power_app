@@ -10,6 +10,7 @@
 - Campo `products.price_compare` adicionado para habilitar exibição de ofertas no formato **de X por Y**.
 - Novas chaves em `settings`: `home_featured_enabled`, `home_featured_title`, `home_featured_subtitle`, `home_featured_label`, `home_featured_badge_title` e `home_featured_badge_text` para controlar a vitrine de destaques na home.
 - Campo `footer_copy` permite personalizar o texto de rodapé com placeholders (`{{year}}`, `{{store_name}}`).
+- Novas opções do método Square (rótulos/links para crédito, débito e Afterpay) e blocos de texto gerenciáveis.
 - Templates de e-mail (cliente/admin) passaram a ser configuráveis via painel (`email_customer_*` e `email_admin_*`).
 - Criada tabela `page_layouts` para armazenar rascunhos/publicações do editor visual da home.
 - Criada tabela `payment_methods` para gerenciar métodos de pagamento dinâmicos via painel.

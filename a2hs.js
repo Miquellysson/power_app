@@ -1,7 +1,7 @@
 /* a2hs.js — Popup/Modal bonito para instalar o app (Android + iOS) em /farmafixed */
 (function () {
   const CONFIG = {
-    appName: 'Farma Fácil',
+    appName: 'Get Power',
     icon192: 'assets/icons/farma-192.png',      // relativo à pasta /farmafixed
     deferDaysAfterDismiss: 7,                    // dias sem mostrar após fechar
     swPaths: ['sw.js', '/sw.js']      // tenta registrar local e explícito
@@ -162,9 +162,9 @@
     if (dismissedRecently() || isInStandalone) return;
 
     makeModal({
-      title: 'Instalar App Farma Fácil',
+      title: 'Instalar App Get Power',
       subtitle: `${location.hostname}/farmafixed`,
-      primaryLabel: 'Instalar App Farma Fácil',
+      primaryLabel: 'Instalar App Get Power',
       onPrimary: async () => {
         try {
           deferredEvt.prompt();
@@ -196,7 +196,7 @@
   function showIOSModal() {
     if (dismissedRecently() || isInStandalone) return;
     makeModal({
-      title: 'Instalar App Farma Fácil',
+      title: 'Instalar App Get Power',
       subtitle: 'Para instalar, use o Safari:',
       ios: true
     });

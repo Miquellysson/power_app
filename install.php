@@ -1,6 +1,6 @@
 <?php
 /**
- * install.php — Farma Fácil (pasta /farmafixed)
+ * install.php — Get Power (pasta /getpower)
  * - Cria/atualiza as tabelas
  * - Faz seed de admin, categorias e produtos demo
  * - Idempotente (pode rodar mais de uma vez)
@@ -310,16 +310,17 @@ try {
     } catch (Throwable $e) {}
 
     $storeCfg = $configData['store'] ?? [];
-    $storeNameDefault = $existingSettings['store_name'] ?? ($storeCfg['name'] ?? 'Farma Fácil');
+    $storeNameDefault = $existingSettings['store_name'] ?? ($storeCfg['name'] ?? 'Get Power');
     $storeEmailDefault = $existingSettings['store_email'] ?? ($storeCfg['support_email'] ?? 'contato@example.com');
     $storePhoneDefault = $existingSettings['store_phone'] ?? ($storeCfg['phone'] ?? '(00) 00000-0000');
     $storeAddressDefault = $existingSettings['store_address'] ?? ($storeCfg['address'] ?? 'Endereço não configurado');
     $footerDescriptionDefault = $existingSettings['footer_description'] ?? 'Sua farmácia online com experiência de app.';
     $footerCopyDefault = $existingSettings['footer_copy'] ?? '© {{year}} '.$storeNameDefault.'. Todos os direitos reservados.';
     $themeColorDefault = $existingSettings['theme_color'] ?? '#2060C8';
+    $legacyBadge = trim((string)($existingSettings['home_featured_badge'] ?? ''));
     $featuredLabelDefault = $existingSettings['home_featured_label'] ?? 'Oferta destaque';
-    $featuredBadgeTitleDefault = $existingSettings['home_featured_badge_title'] ?? 'Seleção especial';
-    $featuredBadgeTextDefault = $existingSettings['home_featured_badge_text'] ?? 'Selecionados com carinho para você';
+    $featuredBadgeTitleDefault = $existingSettings['home_featured_badge_title'] ?? ($existingSettings['home_featured_title'] ?? 'Seleção especial');
+    $featuredBadgeTextDefault = $existingSettings['home_featured_badge_text'] ?? ($legacyBadge !== '' ? $legacyBadge : 'Selecionados com carinho para você');
 
     $emailCustomerSubjectDefault = "Seu pedido {{order_id}} foi recebido - {$storeNameDefault}";
     $emailCustomerBodyDefault = <<<HTML
@@ -366,7 +367,7 @@ HTML;
       'whatsapp_message'      => 'Olá! Gostaria de tirar uma dúvida sobre os produtos.',
       'store_currency'        => 'USD',
       'pwa_name'              => $storeNameDefault,
-      'pwa_short_name'        => 'Victor Farma',
+      'pwa_short_name'        => 'Get Power',
       'home_featured_enabled' => '0',
       'home_featured_title'   => 'Ofertas em destaque',
       'home_featured_subtitle'=> 'Seleção especial com preços imperdíveis.',

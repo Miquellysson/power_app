@@ -21,7 +21,7 @@ if (!defined('LSCACHE_NO_CACHE')) {
 if (session_status() !== PHP_SESSION_ACTIVE) {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443);
   // Nome fixo evita colisão com outras apps no mesmo domínio
-  session_name('FarmaFixedSESSID');
+  session_name('GetPowerSESSID');
   session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',

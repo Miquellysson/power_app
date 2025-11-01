@@ -50,6 +50,13 @@ function pm_clip_text($value, $max = 8000) {
   return $value;
 }
 
+function pm_safe_html($value, $allowed = '<br><strong><em><span>', $max = 8000) {
+  $value = pm_clip_text($value, $max);
+  $value = trim((string)$value);
+  $value = strip_tags($value, $allowed);
+  return $value;
+}
+
 function pm_slug($text) {
   $text = strtolower($text);
   $text = preg_replace('/[^a-z0-9\-]+/i', '-', $text);
@@ -100,8 +107,8 @@ function pm_collect_settings($type, array $data) {
       $settings['mode'] = pm_sanitize($data['square_mode'] ?? 'square_product_link', 60);
       $settings['open_new_tab'] = !empty($data['square_open_new_tab']);
       $settings['redirect_url'] = pm_sanitize($data['square_redirect_url'] ?? '', 255);
-      $settings['badge_title'] = pm_sanitize($data['square_badge_title'] ?? 'Seleção especial', 120);
-      $settings['badge_text'] = pm_sanitize($data['square_badge_text'] ?? 'Selecionados com carinho para você', 240);
+      $settings['badge_title'] = pm_safe_html($data['square_badge_title'] ?? 'Seleção especial', '<br><strong><em><span>', 240);
+      $settings['badge_text'] = pm_safe_html($data['square_badge_text'] ?? 'Selecionados com carinho para você', '<br><strong><em><span>', 400);
       $settings['credit_label'] = pm_sanitize($data['square_credit_label'] ?? 'Cartão de crédito', 80);
       $settings['credit_link'] = pm_sanitize($data['square_credit_link'] ?? '', 255);
       $settings['debit_label'] = pm_sanitize($data['square_debit_label'] ?? 'Cartão de débito', 80);
@@ -222,6 +229,20 @@ if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD']
 
   $settings = pm_collect_settings($type, $_POST);
 
+  if ($type === 'square' && $isActive) {
+    $mode = $settings['mode'] ?? 'square_product_link';
+    $hasLink = false;
+    if (!empty($settings['credit_link']) || !empty($settings['debit_link']) || !empty($settings['afterpay_link'])) {
+      $hasLink = true;
+    }
+    if (!$hasLink && $mode === 'direct_url' && !empty($settings['redirect_url'])) {
+      $hasLink = true;
+    }
+    if (!$hasLink) {
+      die('Configure ao menos um link (crédito, débito, Afterpay ou URL fixa) antes de ativar o Square.');
+    }
+  }
+
   $iconPath = null;
   if ($action === 'update') {
     $st = $pdo->prepare('SELECT icon_path FROM payment_methods WHERE id=?');
@@ -314,13 +335,13 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $metaTitle = pm_sanitize($_POST['store_meta_title'] ?? '', 160);
   if ($metaTitle === '') {
-    $metaTitle = ($storeName ?: 'Farma Fácil').' | Loja';
+    $metaTitle = ($storeName ?: 'Get Power').' | Loja';
   }
   setting_set('store_meta_title', $metaTitle);
 
   $pwaName = pm_sanitize($_POST['pwa_name'] ?? '', 80);
   if ($pwaName === '') {
-    $pwaName = $storeName ?: 'Farma Fácil';
+    $pwaName = $storeName ?: 'Get Power';
   }
   setting_set('pwa_name', $pwaName);
 
@@ -353,10 +374,10 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $featuredEnabled = isset($_POST['home_featured_enabled']) ? '1' : '0';
   $featuredTitle = pm_sanitize($_POST['home_featured_title'] ?? '', 80);
-  $featuredSubtitle = pm_sanitize($_POST['home_featured_subtitle'] ?? '', 200);
+  $featuredSubtitle = pm_safe_html($_POST['home_featured_subtitle'] ?? '', '<br><strong><em><span>', 400);
   $featuredLabel = pm_sanitize($_POST['home_featured_label'] ?? '', 80);
-  $featuredBadgeTitle = pm_sanitize($_POST['home_featured_badge_title'] ?? '', 120);
-  $featuredBadgeText = pm_sanitize($_POST['home_featured_badge_text'] ?? '', 240);
+  $featuredBadgeTitle = pm_safe_html($_POST['home_featured_badge_title'] ?? '', '<br><strong><em><span>', 240);
+  $featuredBadgeText = pm_safe_html($_POST['home_featured_badge_text'] ?? '', '<br><strong><em><span>', 400);
   if ($featuredTitle === '') {
     $featuredTitle = 'Ofertas em destaque';
   }
@@ -438,13 +459,13 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   }
   setting_set('theme_color', strtoupper($themeColor));
   $headerSublineNew = pm_sanitize($_POST['header_subline'] ?? '', 120);
-  if ($headerSublineNew === '') $headerSublineNew = 'Farmácia Online';
+  if ($headerSublineNew === '') $headerSublineNew = 'Loja Online';
   setting_set('header_subline', $headerSublineNew);
   $footerTitleNew = pm_sanitize($_POST['footer_title'] ?? '', 80);
-  if ($footerTitleNew === '') $footerTitleNew = 'FarmaFixed';
+  if ($footerTitleNew === '') $footerTitleNew = 'Get Power';
   setting_set('footer_title', $footerTitleNew);
   $footerDescriptionNew = pm_sanitize($_POST['footer_description'] ?? '', 160);
-  if ($footerDescriptionNew === '') $footerDescriptionNew = 'Sua farmácia online com experiência de app.';
+  if ($footerDescriptionNew === '') $footerDescriptionNew = 'Sua loja online com experiência de app.';
   setting_set('footer_description', $footerDescriptionNew);
 
   if ($errors) {
@@ -492,7 +513,7 @@ $layoutData = [
 $layoutJson = json_encode($layoutData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
 $storeCfg = cfg()['store'] ?? [];
-$storeNameCurrent = setting_get('store_name', $storeCfg['name'] ?? 'Farma Fácil');
+$storeNameCurrent = setting_get('store_name', $storeCfg['name'] ?? 'Get Power');
 $storeEmailCurrent = setting_get('store_email', $storeCfg['support_email'] ?? 'contato@example.com');
 $storePhoneCurrent = setting_get('store_phone', $storeCfg['phone'] ?? '');
 $storeAddressCurrent = setting_get('store_address', $storeCfg['address'] ?? '');
@@ -593,15 +614,15 @@ $whatsappEnabled = (int)setting_get('whatsapp_enabled', '0');
 $whatsappNumber = setting_get('whatsapp_number', '');
 $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
 $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
-$headerSublineCurrent = setting_get('header_subline', 'Farmácia Online');
-$footerTitleCurrent = setting_get('footer_title', 'FarmaFixed');
-$footerDescriptionCurrent = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+$headerSublineCurrent = setting_get('header_subline', 'Loja Online');
+$footerTitleCurrent = setting_get('footer_title', 'Get Power');
+$footerDescriptionCurrent = setting_get('footer_description', 'Sua loja online com experiência de app.');
 $footerCopyCurrent = setting_get('footer_copy', '© {{year}} '.($storeNameCurrent ?: 'Sua Loja').'. Todos os direitos reservados.');
 $themeColorCurrent = setting_get('theme_color', '#2060C8');
 $heroBackgroundCurrent = setting_get('hero_background', 'gradient');
 $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
-$metaTitleCurrent = setting_get('store_meta_title', ($storeNameCurrent ?: 'Farma Fácil').' | Loja');
-$pwaNameCurrent = setting_get('pwa_name', $storeNameCurrent ?: 'Farma Fácil');
+$metaTitleCurrent = setting_get('store_meta_title', ($storeNameCurrent ?: 'Get Power').' | Loja');
+$pwaNameCurrent = setting_get('pwa_name', $storeNameCurrent ?: 'Get Power');
 $pwaShortNameCurrent = setting_get('pwa_short_name', $pwaNameCurrent);
 $pwaIcons = get_pwa_icon_paths();
 $pwaIconPreview = pwa_icon_url(192);
@@ -777,7 +798,7 @@ $pwaIconPreview = pwa_icon_url(192);
           <div class="md:col-span-2">
             <label class="block text-sm font-medium mb-1">Título da aba (meta title)</label>
             <input class="input w-full" name="store_meta_title" maxlength="160" value="<?= sanitize_html($metaTitleCurrent); ?>">
-            <p class="hint mt-1">Aparece em <code>&lt;title&gt;</code> e no histórico do navegador. Ex.: "<?= sanitize_html($storeNameCurrent ?: 'Farma Fácil'); ?> | Loja".</p>
+            <p class="hint mt-1">Aparece em <code>&lt;title&gt;</code> e no histórico do navegador. Ex.: "<?= sanitize_html($storeNameCurrent ?: 'Get Power'); ?> | Loja".</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Nome do app (PWA)</label>

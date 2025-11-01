@@ -11,7 +11,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 function admin_header(string $title = 'Painel') {
   // Descobre usuário logado (se existir)
   $userName = $_SESSION['admin_name'] ?? ($_SESSION['user_name'] ?? 'Administrador');
-  $storeName = function_exists('setting_get') ? (setting_get('store_name', 'FarmaFixed')) : 'FarmaFixed';
+  $storeName = function_exists('setting_get') ? (setting_get('store_name', 'Get Power')) : 'Get Power';
 
   echo '<!doctype html><html lang="pt-br"><head>';
   echo '  <meta charset="utf-8">';
@@ -58,7 +58,7 @@ function admin_header(string $title = 'Painel') {
 function admin_footer() {
   echo '    </main>';
   echo '    <footer class="foot">';
-  echo '      <div>&copy; '.date('Y').' FarmaFixed • Painel Administrativo</div>';
+  echo '      <div>&copy; '.date('Y').' Get Power • Painel Administrativo</div>';
   echo '      <div class="muted">v1.0</div>';
   echo '    </footer>';
   echo '  </div>';

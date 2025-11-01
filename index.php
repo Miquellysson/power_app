@@ -1,5 +1,5 @@
 <?php
-// index.php — Loja FarmaFixed com UI estilo app (responsiva + PWA + categorias + carrinho/checkout)
+// index.php — Loja Get Power com UI estilo app (responsiva + PWA + categorias + carrinho/checkout)
 // Versão com: tema vermelho/âmbar, cache-busting, endpoint CSRF ao vivo, CSRF em header, e fetch com credenciais.
 // Requisitos: config.php, lib/db.php, lib/utils.php, (opcional) bootstrap.php para no-cache e asset_url()
 
@@ -96,6 +96,12 @@ function proxy_img($url) {
     $url = '/' . ltrim($url, '/');
   }
   return $url;
+}
+
+function feature_allow_html($value) {
+  $value = trim((string)$value);
+  $value = strip_tags($value, '<br><strong><em><span>');
+  return $value;
 }
 
 if (!function_exists('sanitize_builder_output')) {
@@ -322,8 +328,8 @@ function app_header() {
       $logoUrl .= '?v='.filemtime($absLogo);
     }
   }
-  $metaTitle = setting_get('store_meta_title', (($cfg['store']['name'] ?? 'Farma Fácil').' | Loja'));
-  $pwaName = setting_get('pwa_name', $cfg['store']['name'] ?? 'Farma Fácil');
+  $metaTitle = setting_get('store_meta_title', (($cfg['store']['name'] ?? 'Get Power').' | Loja'));
+  $pwaName = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power');
   $pwaShortName = setting_get('pwa_short_name', $pwaName);
   $pwaIconApple = pwa_icon_url(180);
   $pwaIcon512 = pwa_icon_url(512);
@@ -337,7 +343,8 @@ function app_header() {
   echo '<!doctype html><html lang="'.htmlspecialchars($lang).'"><head>';
   echo '  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
   echo '  <title>'.htmlspecialchars($metaTitle, ENT_QUOTES, 'UTF-8').'</title>';
-  echo '  <meta name="description" content="FarmaFixed — sua farmácia online com experiência de app: rápida, responsiva, segura.">';
+  $defaultDescription = setting_get('store_meta_description', ($cfg['store']['name'] ?? 'Get Power').' — experiência tipo app: rápida, responsiva e segura.');
+  echo '  <meta name="description" content="'.htmlspecialchars($defaultDescription, ENT_QUOTES, 'UTF-8').'">';
   echo '  <link rel="manifest" href="/manifest.php">';
   $themeColor = setting_get('theme_color', '#2060C8');
   echo '  <meta name="theme-color" content="'.htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8').'">';
@@ -389,8 +396,8 @@ function app_header() {
     echo '      <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white grid place-items-center text-2xl"><i class="fas fa-pills"></i></div>';
   }
   echo '      <div>';
-  $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
-  $headerSubline = setting_get('header_subline', 'Farmácia Online');
+  $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power');
+  $headerSubline = setting_get('header_subline', 'Loja Online');
   echo '        <div class="font-semibold leading-tight">'.htmlspecialchars($store_name).'</div>';
   echo '        <div class="text-xs text-gray-500">'.htmlspecialchars($headerSubline, ENT_QUOTES, 'UTF-8').'</div>';
   echo '      </div>';
@@ -443,8 +450,8 @@ function app_footer() {
   echo '<footer class="mt-12 bg-white border-t">';
   echo '  <div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-4 gap-8 text-sm">';
   echo '    <div>';
-  $footerTitle = setting_get('footer_title', 'FarmaFixed');
-  $footerDescription = setting_get('footer_description', 'Sua farmácia online com experiência de app.');
+  $footerTitle = setting_get('footer_title', 'Get Power');
+  $footerDescription = setting_get('footer_description', 'Sua loja online com experiência de app.');
   echo '      <div class="font-semibold mb-2">'.htmlspecialchars($footerTitle, ENT_QUOTES, 'UTF-8').'</div>';
   echo '      <p class="text-gray-500">'.htmlspecialchars($footerDescription, ENT_QUOTES, 'UTF-8').'</p>';
   echo '    </div>';
@@ -740,15 +747,11 @@ if ($route === 'home') {
   $heroBackgroundImage = setting_get('hero_background_image', '');
   $featuredEnabled = (int)setting_get('home_featured_enabled', '0') === 1;
   $featuredTitle = setting_get('home_featured_title', 'Ofertas em destaque');
-  $featuredSubtitle = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
-  $featuredLabel = setting_get('home_featured_label', 'Oferta destaque');
-  $featuredBadgeTitle = setting_get('home_featured_badge_title', 'Seleção especial');
-  $featuredBadgeText = setting_get('home_featured_badge_text', 'Selecionados com carinho para você');
+  $featuredSubtitleHtml = feature_allow_html(setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.'));
+  $featuredLabelHtml = feature_allow_html(setting_get('home_featured_label', 'Oferta destaque'));
+  $featuredBadgeTitleHtml = feature_allow_html(setting_get('home_featured_badge_title', 'Seleção especial'));
+  $featuredBadgeTextHtml = feature_allow_html(setting_get('home_featured_badge_text', 'Selecionados com carinho para você'));
   $featuredTitleHtml = htmlspecialchars($featuredTitle, ENT_QUOTES, 'UTF-8');
-  $featuredSubtitleHtml = htmlspecialchars($featuredSubtitle, ENT_QUOTES, 'UTF-8');
-  $featuredLabelHtml = htmlspecialchars($featuredLabel, ENT_QUOTES, 'UTF-8');
-  $featuredBadgeTitleHtml = htmlspecialchars($featuredBadgeTitle, ENT_QUOTES, 'UTF-8');
-  $featuredBadgeTextHtml = htmlspecialchars($featuredBadgeText, ENT_QUOTES, 'UTF-8');
 
   if ($hasCustomLayout) {
     if ($builderCss !== '') {
@@ -1435,6 +1438,15 @@ if ($route === 'checkout') {
         $squareOptions = array_filter($squareOptions, function ($opt) {
           return !empty($opt['link']);
         });
+        if (empty($squareOptions) && ($settings['mode'] ?? 'square_product_link') === 'direct_url' && !empty($settings['redirect_url'])) {
+          $squareOptions = [
+            'direct' => [
+              'key' => 'direct',
+              'label' => $settings['credit_label'] ?? $pm['name'],
+              'link' => $settings['redirect_url']
+            ]
+          ];
+        }
 
         $badgeTitle = htmlspecialchars($settings['badge_title'] ?? '', ENT_QUOTES, 'UTF-8');
         $badgeText = htmlspecialchars($settings['badge_text'] ?? '', ENT_QUOTES, 'UTF-8');
@@ -1765,9 +1777,69 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  $hasUploadedReceipt = !empty($_FILES['payment_receipt']['name']) || !empty($_FILES['zelle_receipt']['name']);
-  if (!empty($selectedMethod['require_receipt']) && !$hasUploadedReceipt) {
-    die('Envie o comprovante de pagamento para concluir o pedido.');
+  $receiptPath = null;
+  $receiptError = null;
+  $receiptSources = [];
+  if (!empty($_FILES['payment_receipt']['name'])) {
+    $receiptSources[] = $_FILES['payment_receipt'];
+  }
+  if (!empty($_FILES['zelle_receipt']['name'])) {
+    $receiptSources[] = $_FILES['zelle_receipt'];
+  }
+  if ($receiptSources) {
+    $destDir = $cfg['paths']['zelle_receipts'] ?? (__DIR__.'/storage/zelle_receipts');
+    @mkdir($destDir, 0775, true);
+    foreach ($receiptSources as $uploadInfo) {
+      if (empty($uploadInfo['name'])) {
+        continue;
+      }
+      $validation = validate_file_upload($uploadInfo, ['image/jpeg','image/png','image/webp','application/pdf'], 2 * 1024 * 1024);
+      if (!$validation['success']) {
+        $receiptError = $validation['message'] ?? 'Arquivo de comprovante inválido.';
+        continue;
+      }
+      $mime = $validation['mime_type'] ?? '';
+      $ext = strtolower(pathinfo((string)$uploadInfo['name'], PATHINFO_EXTENSION));
+      $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+        'application/pdf' => 'pdf'
+      ];
+      if (!in_array($ext, $map, true)) {
+        $ext = $map[$mime] ?? 'pdf';
+      }
+      $filename = 'receipt_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).'.'.$ext;
+      $destination = rtrim($destDir, '/\\').DIRECTORY_SEPARATOR.$filename;
+      if (!@move_uploaded_file($uploadInfo['tmp_name'], $destination)) {
+        $receiptError = 'Falha ao salvar o comprovante.';
+        continue;
+      }
+      $projectRoot = realpath(__DIR__);
+      $destReal = realpath($destination);
+      $relative = null;
+      if ($projectRoot && $destReal && strpos($destReal, $projectRoot) === 0) {
+        $relative = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', substr($destReal, strlen($projectRoot))), '/');
+      }
+      if (!$relative) {
+        $relative = 'storage/zelle_receipts/'.$filename;
+      }
+      $receiptPath = $relative;
+      $receiptError = null;
+      break;
+    }
+  }
+
+  if ($receiptError) {
+    $_SESSION['checkout_error'] = $receiptError;
+    header('Location: ?route=checkout');
+    exit;
+  }
+
+  if (!empty($selectedMethod['require_receipt']) && !$receiptPath) {
+    $_SESSION['checkout_error'] = 'Envie o comprovante de pagamento para concluir o pedido.';
+    header('Location: ?route=checkout');
+    exit;
   }
 
   $payRef = '';
@@ -1791,6 +1863,17 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       $currency = $methodSettings['currency'] ?? 'USD';
       $returnUrl = $methodSettings['return_url'] ?? '';
       $cancelUrl = $methodSettings['cancel_url'] ?? '';
+      $baseUrl = rtrim($cfg['store']['base_url'] ?? '', '/');
+      if ($baseUrl === '' && !empty($_SERVER['HTTP_HOST'])) {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $baseUrl = $scheme.'://'.$_SERVER['HTTP_HOST'];
+      }
+      if ($returnUrl === '' && $baseUrl !== '') {
+        $returnUrl = $baseUrl.'/index.php?route=order_success';
+      }
+      if ($cancelUrl === '' && $baseUrl !== '') {
+        $cancelUrl = $baseUrl.'/index.php?route=checkout';
+      }
       if ($business) {
         $payRef = 'https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business='.
                   rawurlencode($business).
@@ -1850,50 +1933,6 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $cst->execute([$name,$email,$phone,$address,$city,$state,$zipcode]);
     $customer_id = (int)$pdo->lastInsertId();
 
-    // comprovante zelle (opcional)
-    $receiptPath = null;
-    
-    // Recebe comprovante (qualquer método)
-    $receiptPath = null;
-    if (!empty($_FILES['payment_receipt']['name'])) {
-      $up = $_FILES['payment_receipt'];
-      if ($up['error'] === UPLOAD_ERR_OK) {
-        $ext = strtolower(pathinfo($up['name'], PATHINFO_EXTENSION));
-        $destDir = cfg()['paths']['zelle_receipts'] ?? (__DIR__.'/storage/zelle_receipts');
-        @mkdir($destDir, 0775, true);
-        $fname = 'receipt_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).'.'.$ext;
-        $dest = rtrim($destDir,'/').'/'.$fname;
-        if (@move_uploaded_file($up['tmp_name'], $dest)) {
-          $receiptPath = $fname;
-        }
-      }
-    } elseif (!empty($_FILES['zelle_receipt']['name'])) {
-      // retrocompatibilidade
-      $up = $_FILES['zelle_receipt'];
-      if ($up['error'] === UPLOAD_ERR_OK) {
-        $ext = strtolower(pathinfo($up['name'], PATHINFO_EXTENSION));
-        $destDir = cfg()['paths']['zelle_receipts'] ?? (__DIR__.'/storage/zelle_receipts');
-        @mkdir($destDir, 0775, true);
-        $fname = 'receipt_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).'.'.$ext;
-        $dest = rtrim($destDir,'/').'/'.$fname;
-        if (@move_uploaded_file($up['tmp_name'], $dest)) {
-          $receiptPath = $fname;
-        }
-      }
-    }
-    if ($methodType === 'zelle' && !empty($_FILES["zelle_receipt"]["name"])) {
-      $val = validate_file_upload($_FILES["zelle_receipt"], ["image/jpeg","image/png","application/pdf"]);
-      if ($val["success"]) {
-        $dir = __DIR__ . "/storage/zelle_receipts";
-        @mkdir($dir, 0775, true);
-        $ext = pathinfo($_FILES["zelle_receipt"]["name"], PATHINFO_EXTENSION);
-        $fname = "zelle_".time()."_".bin2hex(random_bytes(4)).".".$ext;
-        if (move_uploaded_file($_FILES["zelle_receipt"]["tmp_name"], $dir."/".$fname)) {
-          $receiptPath = "storage/zelle_receipts/".$fname;
-        }
-      }
-    }
-
   // pedido
   // Verifica se coluna 'track_token' existe (compat com DBs sem migração)
   $hasTrack = false;
@@ -1923,7 +1962,11 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       $_SESSION['square_redirect_url'] = $squareRedirectUrl;
       $_SESSION['square_redirect_warning'] = $squareWarning;
       $_SESSION['square_open_new_tab'] = $squareOpenNewTab ? 1 : 0;
-      $_SESSION['square_option_label'] = (!empty($squareOptionMap) && $squareSelectedOption !== '') ? ($squareOptionMap[$squareSelectedOption]['label'] ?? '') : '';
+      if (!empty($squareOptionMap) && $squareSelectedOption !== '' && !empty($squareOptionMap[$squareSelectedOption]['label'])) {
+        $_SESSION['square_option_label'] = sanitize_string($squareOptionMap[$squareSelectedOption]['label'], 80);
+      } else {
+        $_SESSION['square_option_label'] = '';
+      }
     } else {
       unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['square_option_label']);
     }

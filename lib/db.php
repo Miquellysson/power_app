@@ -1,5 +1,5 @@
 <?php
-// lib/db.php — Conexão com banco de dados MySQL (Farma Fácil)
+// lib/db.php — Conexão com banco de dados MySQL (Get Power)
 
 require_once __DIR__ . '/../config.php'; // garante as constantes DB_* e opções extras
 

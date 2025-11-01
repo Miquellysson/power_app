@@ -1,4 +1,4 @@
-FarmaFixed — Pacote de Tema + A2HS (Add to Home Screen)
+Get Power — Pacote de Tema + A2HS (Add to Home Screen)
 
 Arquivos incluídos:
 - theme.css          → tokens de design (light/dark) sem quebrar seu CSS atual

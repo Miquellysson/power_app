@@ -15,7 +15,7 @@ $ALLOW_HOSTS = [
 $CACHE_DIR  = __DIR__ . '/storage/proxy_cache';
 $CACHE_TTL  = 3600; // 1h
 $MAX_BYTES  = 8 * 1024 * 1024; // 8 MB por imagem
-$UA         = 'VictorFarma Proxy/1.0';
+$UA         = 'GetPower Proxy/1.0';
 $REFERER    = 'https://victorfarmafacil.com/'; // referer "amigável" para a origem
 
 // Sanitiza e valida URL

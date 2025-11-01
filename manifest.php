@@ -8,7 +8,7 @@ header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=600');
 
 $cfg = cfg();
-$name = setting_get('pwa_name', $cfg['store']['name'] ?? 'Farma Fácil');
+$name = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power');
 $short = setting_get('pwa_short_name', $name);
 $themeColor = setting_get('theme_color', '#2060C8');
 $backgroundColor = setting_get('pwa_background_color', $themeColor);
@@ -31,13 +31,13 @@ foreach ([192, 512] as $size) {
 if (!$icons) {
     $icons = [
         [
-            'src' => '/assets/icons/farma-192.png',
+            'src' => '/assets/pwa/icon-192.png',
             'sizes' => '192x192',
             'type' => 'image/png',
             'purpose' => 'any maskable'
         ],
         [
-            'src' => '/assets/icons/farma-512.png',
+            'src' => '/assets/pwa/icon-512.png',
             'sizes' => '512x512',
             'type' => 'image/png',
             'purpose' => 'any maskable'

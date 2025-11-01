@@ -1,6 +1,6 @@
 <?php
 return [
-  'title' => 'Farma Fácil',
+  'title' => 'Get Power',
   'search' => 'Search',
   'add_to_cart' => 'Add',
   'cart' => 'Cart',

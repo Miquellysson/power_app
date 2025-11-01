@@ -36,10 +36,10 @@ $allowed = ['login','logout','dashboard','settings','api_ping'];
 if (!in_array($route, $allowed, true)) $route = is_admin() ? 'dashboard' : 'login';
 
 /* ===== Layout ===== */
-function admin_header($title='Admin - FarmaFixed', $withLayout=true){
+function admin_header($title='Admin - Get Power', $withLayout=true){
   $logo = find_logo_path();
   $cfg  = function_exists('cfg') ? cfg() : [];
-  $storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Farma Fácil');
+  $storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power');
   $currentScript = basename($_SERVER['SCRIPT_NAME']);
   $route = $_GET['route'] ?? '';
 
@@ -243,7 +243,7 @@ try{
           'role'  => $role,
         ]);
         header('Location: dashboard.php'); exit;
-      } elseif (defined('ADMIN_EMAIL') && defined('ADMIN_PASS_HASH') && $email === ADMIN_EMAIL && password_verify($pass, ADMIN_PASS_HASH)) {
+      } elseif (defined('ADMIN_EMAIL') && defined('ADMIN_PASS_HASH') && ADMIN_EMAIL !== '' && ADMIN_PASS_HASH !== '' && $email === ADMIN_EMAIL && password_verify($pass, ADMIN_PASS_HASH)) {
         if (!$userRow) {
           try {
             $ins = db()->prepare("INSERT IGNORE INTO users(name,email,pass,role,active,created_at) VALUES(?,?,?,?,1,NOW())");

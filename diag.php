@@ -1,6 +1,6 @@
 <?php
 /**
- * diagnostico.php — Farma Fácil
+ * diagnostico.php — Get Power
  * Ferramenta de diagnóstico segura (somente leitura por padrão)
  * Parâmetros:
  *   ?format=json     -> exporta relatório em JSON
@@ -14,7 +14,7 @@ mb_internal_encoding('UTF-8');
 
 $RESULT = [
   'meta' => [
-    'app' => 'Farma Fácil',
+    'app' => 'Get Power',
     'timestamp' => date('c'),
     'php_sapi' => PHP_SAPI,
     'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown',
@@ -246,7 +246,7 @@ function bg($ok){ return $ok ? '#ecfdf5' : '#fef2f2'; }
 <html lang="pt-br">
 <head>
 <meta charset="utf-8">
-<title>Diagnóstico — Farma Fácil</title>
+<title>Diagnóstico — Get Power</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,Helvetica,Arial,sans-serif;background:#f8fafc;color:#0f172a;margin:0}
@@ -265,7 +265,7 @@ function bg($ok){ return $ok ? '#ecfdf5' : '#fef2f2'; }
 </head>
 <body>
 <header>
-  <h1>🏥 Diagnóstico — Farma Fácil</h1>
+  <h1>🏥 Diagnóstico — Get Power</h1>
   <div class="small">Gerado em <?=htmlspecialchars($RESULT['meta']['timestamp'])?></div>
 </header>
 <main>

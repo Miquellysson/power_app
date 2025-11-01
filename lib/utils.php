@@ -1,5 +1,5 @@
 <?php
-// lib/utils.php - Utilitários do sistema Farma Fácil (com settings, upload de logo e helpers)
+// lib/utils.php - Utilitários do sistema Get Power (com settings, upload de logo e helpers)
 
 /* =========================================================================
    Carregamento de configuração (cfg)
@@ -63,7 +63,7 @@ if (!function_exists('t')) {
 if (!function_exists('get_default_dict')) {
     function get_default_dict() {
         return [
-            'title' => 'Farma Fácil',
+            'title' => 'Get Power',
             'cart' => 'Carrinho',
             'search' => 'Buscar',
             'lang' => 'Idioma',
@@ -1029,8 +1029,14 @@ if (!function_exists('send_order_admin_alert')) {
                     $recipients[] = (string)$extraEmails;
                 }
             }
-            $recipients[] = $store['support_email'] ?? null;
-            $recipients[] = 'mike@arkaleads.com';
+
+            $supportEmail = $storeInfo['email'] ?? ($cfg['store']['support_email'] ?? null);
+            if (!$supportEmail && defined('ADMIN_EMAIL')) {
+                $supportEmail = ADMIN_EMAIL;
+            }
+            if ($supportEmail) {
+                $recipients[] = $supportEmail;
+            }
 
             $recipients = array_filter(array_unique(array_map('trim', $recipients)));
             $success = true;
@@ -1085,7 +1091,7 @@ if (!function_exists('store_info')) {
     function store_info() {
         $cfg = cfg();
         return [
-            'name'   => setting_get('store_name',   $cfg['store']['name']   ?? 'Farma Fácil'),
+            'name'   => setting_get('store_name',   $cfg['store']['name']   ?? 'Get Power'),
             'email'  => setting_get('store_email',  $cfg['store']['support_email'] ?? 'contato@example.com'),
             'phone'  => setting_get('store_phone',  $cfg['store']['phone']  ?? '(00) 00000-0000'),
             'addr'   => setting_get('store_address',$cfg['store']['address']?? 'Endereço não configurado'),
