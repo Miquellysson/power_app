@@ -346,20 +346,30 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $featuredEnabled = isset($_POST['home_featured_enabled']) ? '1' : '0';
   $featuredTitle = pm_sanitize($_POST['home_featured_title'] ?? '', 80);
   $featuredSubtitle = pm_sanitize($_POST['home_featured_subtitle'] ?? '', 200);
-  $featuredBadge = pm_sanitize($_POST['home_featured_badge'] ?? '', 120);
+  $featuredLabel = pm_sanitize($_POST['home_featured_label'] ?? '', 80);
+  $featuredBadgeTitle = pm_sanitize($_POST['home_featured_badge_title'] ?? '', 120);
+  $featuredBadgeText = pm_sanitize($_POST['home_featured_badge_text'] ?? '', 240);
   if ($featuredTitle === '') {
     $featuredTitle = 'Ofertas em destaque';
   }
   if ($featuredSubtitle === '') {
     $featuredSubtitle = 'Seleção especial com preços imperdíveis.';
   }
-  if ($featuredBadge === '') {
-    $featuredBadge = 'Selecionados com carinho para você';
+  if ($featuredLabel === '') {
+    $featuredLabel = 'Oferta destaque';
+  }
+  if ($featuredBadgeTitle === '') {
+    $featuredBadgeTitle = 'Seleção especial';
+  }
+  if ($featuredBadgeText === '') {
+    $featuredBadgeText = 'Selecionados com carinho para você';
   }
   setting_set('home_featured_enabled', $featuredEnabled);
   setting_set('home_featured_title', $featuredTitle);
   setting_set('home_featured_subtitle', $featuredSubtitle);
-  setting_set('home_featured_badge', $featuredBadge);
+  setting_set('home_featured_label', $featuredLabel);
+  setting_set('home_featured_badge_title', $featuredBadgeTitle);
+  setting_set('home_featured_badge_text', $featuredBadgeText);
 
   $footerCopy = pm_clip_text($_POST['footer_copy'] ?? '', 280);
   if ($footerCopy === '') {
@@ -561,9 +571,11 @@ admin_header('Configurações');
       $heroTitleCurrent = setting_get('home_hero_title', 'Tudo para sua saúde');
       $heroSubtitleCurrent = setting_get('home_hero_subtitle', 'Experiência de app, rápida e segura.');
 $featuredEnabledCurrent = (int)setting_get('home_featured_enabled', '0');
+$featuredLabelCurrent = setting_get('home_featured_label', 'Oferta destaque');
 $featuredTitleCurrent = setting_get('home_featured_title', 'Ofertas em destaque');
 $featuredSubtitleCurrent = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
-$featuredBadgeCurrent = setting_get('home_featured_badge', 'Selecionados com carinho para você');
+$featuredBadgeTitleCurrent = setting_get('home_featured_badge_title', 'Seleção especial');
+$featuredBadgeTextCurrent = setting_get('home_featured_badge_text', 'Selecionados com carinho para você');
 $emailDefaults = email_template_defaults($storeNameCurrent ?: ($storeCfg['name'] ?? ''));
 $emailCustomerSubjectCurrent = setting_get('email_customer_subject', $emailDefaults['customer_subject']);
 $emailCustomerBodyCurrent = setting_get('email_customer_body', $emailDefaults['customer_body']);
@@ -685,9 +697,17 @@ $pwaIconPreview = pwa_icon_url(192);
           <p class="hint mt-1">Ex.: “Seleção especial com preços imperdíveis — de X por Y”.</p>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Texto do selo</label>
-          <input class="input w-full" name="home_featured_badge" maxlength="120" value="<?= sanitize_html($featuredBadgeCurrent); ?>" placeholder="Selecionados com carinho para você">
-          <p class="hint mt-1">Exibido ao lado do título quando a seção está ativa.</p>
+          <label class="block text-sm font-medium mb-1">Etiqueta superior</label>
+          <input class="input w-full" name="home_featured_label" maxlength="80" value="<?= sanitize_html($featuredLabelCurrent); ?>" placeholder="Oferta destaque">
+          <p class="hint mt-1">Texto pequeno exibido acima do título.</p>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Título principal (H1)</label>
+          <input class="input w-full" name="home_featured_badge_title" maxlength="120" value="<?= sanitize_html($featuredBadgeTitleCurrent); ?>" placeholder="Seleção especial">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Texto complementar</label>
+          <textarea class="textarea w-full" name="home_featured_badge_text" rows="2" maxlength="240"><?= sanitize_html($featuredBadgeTextCurrent); ?></textarea>
         </div>
       </div>
 

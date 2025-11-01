@@ -317,6 +317,9 @@ try {
     $footerDescriptionDefault = $existingSettings['footer_description'] ?? 'Sua farmácia online com experiência de app.';
     $footerCopyDefault = $existingSettings['footer_copy'] ?? '© {{year}} '.$storeNameDefault.'. Todos os direitos reservados.';
     $themeColorDefault = $existingSettings['theme_color'] ?? '#2060C8';
+    $featuredLabelDefault = $existingSettings['home_featured_label'] ?? 'Oferta destaque';
+    $featuredBadgeTitleDefault = $existingSettings['home_featured_badge_title'] ?? 'Seleção especial';
+    $featuredBadgeTextDefault = $existingSettings['home_featured_badge_text'] ?? 'Selecionados com carinho para você';
 
     $emailCustomerSubjectDefault = "Seu pedido {{order_id}} foi recebido - {$storeNameDefault}";
     $emailCustomerBodyDefault = <<<HTML
@@ -358,6 +361,7 @@ HTML;
       'footer_description'    => $footerDescriptionDefault,
       'footer_copy'           => $footerCopyDefault,
       'theme_color'           => $themeColorDefault,
+      'home_featured_label'   => $featuredLabelDefault,
       'whatsapp_button_text'  => 'Fale com a gente',
       'whatsapp_message'      => 'Olá! Gostaria de tirar uma dúvida sobre os produtos.',
       'store_currency'        => 'USD',
@@ -366,6 +370,8 @@ HTML;
       'home_featured_enabled' => '0',
       'home_featured_title'   => 'Ofertas em destaque',
       'home_featured_subtitle'=> 'Seleção especial com preços imperdíveis.',
+      'home_featured_badge_title' => $featuredBadgeTitleDefault,
+      'home_featured_badge_text'  => $featuredBadgeTextDefault,
       'email_customer_subject'=> $emailCustomerSubjectDefault,
       'email_customer_body'   => $emailCustomerBodyDefault,
       'email_admin_subject'   => $emailAdminSubjectDefault,

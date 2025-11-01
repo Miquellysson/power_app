@@ -741,8 +741,14 @@ if ($route === 'home') {
   $featuredEnabled = (int)setting_get('home_featured_enabled', '0') === 1;
   $featuredTitle = setting_get('home_featured_title', 'Ofertas em destaque');
   $featuredSubtitle = setting_get('home_featured_subtitle', 'Seleção especial com preços imperdíveis.');
+  $featuredLabel = setting_get('home_featured_label', 'Oferta destaque');
+  $featuredBadgeTitle = setting_get('home_featured_badge_title', 'Seleção especial');
+  $featuredBadgeText = setting_get('home_featured_badge_text', 'Selecionados com carinho para você');
   $featuredTitleHtml = htmlspecialchars($featuredTitle, ENT_QUOTES, 'UTF-8');
   $featuredSubtitleHtml = htmlspecialchars($featuredSubtitle, ENT_QUOTES, 'UTF-8');
+  $featuredLabelHtml = htmlspecialchars($featuredLabel, ENT_QUOTES, 'UTF-8');
+  $featuredBadgeTitleHtml = htmlspecialchars($featuredBadgeTitle, ENT_QUOTES, 'UTF-8');
+  $featuredBadgeTextHtml = htmlspecialchars($featuredBadgeText, ENT_QUOTES, 'UTF-8');
 
   if ($hasCustomLayout) {
     if ($builderCss !== '') {
@@ -855,19 +861,19 @@ if ($route === 'home') {
   if ($featuredEnabled && $featuredProducts) {
     echo '<section class="relative overflow-hidden py-12">';
     echo '  <div class="absolute inset-0 bg-gradient-to-r from-[#0f3d91] via-[#1f54c1] to-[#3a7bff] opacity-95"></div>';
-    echo '  <div class="relative max-w-7xl mx-auto px-4 text-white space-y-6">';
-    echo '    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">';
-    echo '      <div>';
-    echo '        <span class="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-white/70 mb-2"><i class="fa-solid fa-bolt"></i> Oferta destaque</span>';
-    echo '        <h2 class="text-3xl md:text-4xl font-bold">'.$featuredTitleHtml.'</h2>';
-    echo '        <p class="text-white/80 text-base md:text-lg max-w-2xl">'.$featuredSubtitleHtml.'</p>';
-    echo '      </div>';
-    $featuredBadgeText = setting_get('home_featured_badge', 'Selecionados com carinho para você');
-    if ($featuredBadgeText !== '') {
-      echo '      <div class="flex items-center gap-2 text-sm text-white/80"><i class="fa-solid fa-star"></i><span>'.htmlspecialchars($featuredBadgeText, ENT_QUOTES, 'UTF-8').'</span></div>';
+    echo '  <div class="relative max-w-5xl mx-auto px-4 text-white space-y-6 text-center">';
+    echo '    <div class="space-y-3">';
+    echo '      <span class="inline-flex items-center justify-center gap-2 text-xs uppercase tracking-[0.35em] text-white/70"><i class="fa-solid fa-bolt"></i> '.$featuredLabelHtml.'</span>';
+    echo '      <h1 class="text-4xl md:text-5xl font-bold">'.$featuredBadgeTitleHtml.'</h1>';
+    if ($featuredBadgeTextHtml !== '') {
+      echo '      <p class="text-white/80 text-base md:text-lg max-w-2xl mx-auto">'.$featuredBadgeTextHtml.'</p>';
+    }
+    echo '      <h2 class="text-2xl md:text-3xl font-semibold">'.$featuredTitleHtml.'</h2>';
+    if ($featuredSubtitleHtml !== '') {
+      echo '      <p class="text-white/80 text-base max-w-2xl mx-auto">'.$featuredSubtitleHtml.'</p>';
     }
     echo '    </div>';
-    echo '    <div class="flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory" style="-webkit-overflow-scrolling: touch;">';
+    echo '    <div class="mt-6 flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory justify-start md:justify-center" style="-webkit-overflow-scrolling: touch;">';
     foreach ($featuredProducts as $fp) {
       $img = $fp['image_path'] ?: 'assets/no-image.png';
       $img = proxy_img($img);

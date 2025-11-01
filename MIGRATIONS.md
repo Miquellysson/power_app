@@ -8,7 +8,7 @@
 - Campo `products.square_payment_link` criado para suportar links diretos do Square por produto.
 - Campo `products.stripe_payment_link` criado para permitir checkout direto via Stripe por produto.
 - Campo `products.price_compare` adicionado para habilitar exibição de ofertas no formato **de X por Y**.
-- Novas chaves em `settings`: `home_featured_enabled`, `home_featured_title` e `home_featured_subtitle` para controlar a vitrine de destaques na home.
+- Novas chaves em `settings`: `home_featured_enabled`, `home_featured_title`, `home_featured_subtitle`, `home_featured_label`, `home_featured_badge_title` e `home_featured_badge_text` para controlar a vitrine de destaques na home.
 - Campo `footer_copy` permite personalizar o texto de rodapé com placeholders (`{{year}}`, `{{store_name}}`).
 - Templates de e-mail (cliente/admin) passaram a ser configuráveis via painel (`email_customer_*` e `email_admin_*`).
 - Criada tabela `page_layouts` para armazenar rascunhos/publicações do editor visual da home.
@@ -22,7 +22,7 @@
    - Inclui os campos `square_payment_link`, `stripe_payment_link` e `price_compare` na tabela `products` sem impactar cadastros existentes.
    - Cria/atualiza a tabela `page_layouts` com a coluna `meta` (se ausente).
    - Provisiona a tabela `payment_methods` e popula com Pix/Zelle/Venmo/PayPal/Square caso esteja vazia.
-   - Semeia as preferências da vitrine de destaques (`home_featured_*`) com valores padrão e mantém desativada até habilitar no painel.
+   - Semeia as preferências da vitrine de destaques (`home_featured_*`) com valores padrão (incluindo selo, título e descrição) e mantém desativada até habilitar no painel.
    - Popula os templates de e-mail (`email_customer_*` e `email_admin_*`) com mensagens padrão personalizáveis.
    - Adiciona o texto padrão de rodapé (`footer_copy`) usando placeholders dinâmicos.
 
