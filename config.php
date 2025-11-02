@@ -102,4 +102,9 @@ return [
         'email_notifications' => true,
         'check_interval'      => 5000, // 5 segundos
     ],
+    'custom_scripts' => [
+        'head'       => getenv('FF_SNIPPET_HEAD') ?: '',
+        'body_start' => getenv('FF_SNIPPET_BODY_START') ?: '',
+        'body_end'   => getenv('FF_SNIPPET_BODY_END') ?: '',
+    ],
 ];

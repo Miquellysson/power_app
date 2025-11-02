@@ -462,6 +462,9 @@ function app_header() {
           .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
           .product-card:hover img{transform: scale(1.05)}
         </style>';
+  if (!empty($cfg['custom_scripts']['head'])) {
+    echo $cfg['custom_scripts']['head'];
+  }
   $squareLoadingUrl = 'square-loading.html';
   $squareLoadingFile = __DIR__.'/square-loading.html';
   if (is_file($squareLoadingFile)) {
@@ -469,6 +472,9 @@ function app_header() {
   }
   $bodyAttrs = 'class="bg-gray-50 text-gray-800 min-h-screen" data-square-loading-url="'.htmlspecialchars($squareLoadingUrl, ENT_QUOTES, 'UTF-8').'"';
   echo '</head><body '.$bodyAttrs.'>';
+  if (!empty($cfg['custom_scripts']['body_start'])) {
+    echo $cfg['custom_scripts']['body_start'];
+  }
 
   // Topbar (estilo app) — sticky + blur
   echo '<header class="sticky top-0 z-40 border-b bg-white/90 blur-bg">';
@@ -528,6 +534,7 @@ function app_header() {
 }
 
 function app_footer() {
+  global $cfg;
   echo '</main>';
 
   // Footer enxuto tipo app
@@ -782,6 +789,10 @@ function app_footer() {
       }
     }
   </script>';
+
+  if (!empty($cfg['custom_scripts']['body_end'])) {
+    echo $cfg['custom_scripts']['body_end'];
+  }
 
   echo '</body></html>';
 }
