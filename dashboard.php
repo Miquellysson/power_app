@@ -108,7 +108,7 @@ echo '<div class="card">';
 echo '  <div class="card-title">Últimos pedidos</div>';
 echo '  <div class="card-body overflow-x-auto">';
 try{
-  $st=$pdo->query("SELECT o.id,o.total,o.status,o.created_at,c.name AS customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id ORDER BY o.id DESC LIMIT 10");
+  $st=$pdo->query("SELECT o.id,o.total,o.currency,o.status,o.created_at,c.name AS customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id ORDER BY o.id DESC LIMIT 10");
   echo '<table class="table"><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Status</th><th>Quando</th><th></th></tr></thead><tbody>';
   foreach($st as $row){
     $badge = '<span class="badge">'.sanitize_html($row['status']).'</span>';
@@ -118,7 +118,8 @@ try{
     echo '<tr>';
     echo '<td>#'.(int)$row['id'].'</td>';
     echo '<td>'.sanitize_html($row['customer_name'] ?: '-').'</td>';
-    echo '<td>$ '.number_format((float)$row['total'],2,',','.').'</td>';
+    $rowCurrency = strtoupper($row['currency'] ?? (cfg()['store']['currency'] ?? 'USD'));
+    echo '<td>'.format_currency((float)$row['total'], $rowCurrency).'</td>';
     echo '<td>'.$badge.'</td>';
     echo '<td>'.sanitize_html($row['created_at'] ?? '').'</td>';
     echo '<td><a class="btn btn-ghost" href="orders.php?action=view&id='.(int)$row['id'].'"><i class="fa-solid fa-eye"></i> Ver</a></td>';

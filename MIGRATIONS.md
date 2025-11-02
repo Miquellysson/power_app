@@ -23,10 +23,31 @@
    - Inclui os campos `square_payment_link`, `stripe_payment_link` e `price_compare` na tabela `products` sem impactar cadastros existentes.
    - Cria/atualiza a tabela `page_layouts` com a coluna `meta` (se ausente).
    - Provisiona a tabela `payment_methods` e popula com Pix/Zelle/Venmo/PayPal/Square caso esteja vazia.
-   - Semeia as preferências da vitrine de destaques (`home_featured_*`) com valores padrão (incluindo selo, título e descrição) e mantém desativada até habilitar no painel.
-   - Popula os templates de e-mail (`email_customer_*` e `email_admin_*`) com mensagens padrão personalizáveis.
-   - Adiciona o texto padrão de rodapé (`footer_copy`) usando placeholders dinâmicos.
+- Semeia as preferências da vitrine de destaques (`home_featured_*`) com valores padrão (incluindo selo, título e descrição) e mantém desativada até habilitar no painel.
+- Popula os templates de e-mail (`email_customer_*` e `email_admin_*`) com mensagens padrão personalizáveis.
+- Adiciona o texto padrão de rodapé (`footer_copy`) usando placeholders dinâmicos.
 
 ## Link de acompanhamento
 - Depois do pedido, o cliente verá o link.
 - Por e-mail, o link é enviado (usa `cfg()['store']['base_url']` se definido; senão, link relativo `/index.php?route=track&code=...`).
+
+## 2025-02-14 — Recuperação de senha
+- Nova tabela `password_resets` para controlar tokens individuais:
+  ```sql
+  CREATE TABLE password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    ip_request VARCHAR(45),
+    user_agent VARCHAR(255),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_token (token_hash),
+    INDEX idx_user (user_id),
+    CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  ```
+- Endpoints `api/forgot_password_request.php` e `api/reset_password_submit.php` criados.
+- Novas páginas `forgot_password.php` e `reset_password.php` para fluxo completo com validações e mensagens amigáveis.
+- Templates de e-mail HTML e texto (`emails/password_reset.*`).

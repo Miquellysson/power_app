@@ -103,6 +103,11 @@ function pm_collect_settings($type, array $data) {
       $settings['return_url'] = pm_sanitize($data['paypal_return_url'] ?? '', 255);
       $settings['cancel_url'] = pm_sanitize($data['paypal_cancel_url'] ?? '', 255);
       break;
+    case 'whatsapp':
+      $settings['number'] = pm_sanitize($data['whatsapp_number'] ?? '', 60);
+      $settings['message'] = pm_clip_text($data['whatsapp_message'] ?? '', 500);
+      $settings['link'] = pm_sanitize($data['whatsapp_link'] ?? '', 255);
+      break;
     case 'square':
       $settings['mode'] = pm_sanitize($data['square_mode'] ?? 'square_product_link', 60);
       $settings['open_new_tab'] = !empty($data['square_open_new_tab']);
@@ -239,7 +244,7 @@ if (($action === 'create' || $action === 'update') && $_SERVER['REQUEST_METHOD']
       $hasLink = true;
     }
     if (!$hasLink) {
-      die('Configure ao menos um link (crédito, débito, Afterpay ou URL fixa) antes de ativar o Square.');
+      die('Configure ao menos um link (crédito, débito, Afterpay ou URL fixa) antes de ativar o cartão de crédito (Square).');
     }
   }
 
@@ -335,13 +340,13 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   $metaTitle = pm_sanitize($_POST['store_meta_title'] ?? '', 160);
   if ($metaTitle === '') {
-    $metaTitle = ($storeName ?: 'Get Power').' | Loja';
+    $metaTitle = ($storeName ?: 'Get Power Research').' | Loja';
   }
   setting_set('store_meta_title', $metaTitle);
 
   $pwaName = pm_sanitize($_POST['pwa_name'] ?? '', 80);
   if ($pwaName === '') {
-    $pwaName = $storeName ?: 'Get Power';
+    $pwaName = $storeName ?: 'Get Power Research';
   }
   setting_set('pwa_name', $pwaName);
 
@@ -462,7 +467,7 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($headerSublineNew === '') $headerSublineNew = 'Loja Online';
   setting_set('header_subline', $headerSublineNew);
   $footerTitleNew = pm_sanitize($_POST['footer_title'] ?? '', 80);
-  if ($footerTitleNew === '') $footerTitleNew = 'Get Power';
+  if ($footerTitleNew === '') $footerTitleNew = 'Get Power Research';
   setting_set('footer_title', $footerTitleNew);
   $footerDescriptionNew = pm_sanitize($_POST['footer_description'] ?? '', 160);
   if ($footerDescriptionNew === '') $footerDescriptionNew = 'Sua loja online com experiência de app.';
@@ -479,7 +484,38 @@ if ($action === 'save_general' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 try {
+$methods = $pdo->query('SELECT * FROM payment_methods ORDER BY sort_order ASC, id ASC')->fetchAll(PDO::FETCH_ASSOC);
+$hasWhatsapp = false;
+foreach ($methods as $m) {
+  if (($m['code'] ?? '') === 'whatsapp') {
+    $hasWhatsapp = true;
+    break;
+  }
+}
+if (!$hasWhatsapp && $canManagePayments) {
+  $sortOrder = (int)$pdo->query('SELECT COALESCE(MAX(sort_order),0)+10 FROM payment_methods')->fetchColumn();
+  $settingsJson = json_encode([
+    'type' => 'whatsapp',
+    'account_label' => 'WhatsApp',
+    'account_value' => '',
+    'number' => '',
+    'message' => 'Olá! Gostaria de finalizar meu pedido.',
+    'link' => ''
+  ], JSON_UNESCAPED_UNICODE);
+  $insWhatsapp = $pdo->prepare('INSERT INTO payment_methods(code,name,description,instructions,settings,icon_path,is_active,require_receipt,sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+  $insWhatsapp->execute([
+    'whatsapp',
+    'WhatsApp',
+    '',
+    'Converse com nossa equipe pelo WhatsApp para concluir: {whatsapp_link}.',
+    $settingsJson,
+    null,
+    0,
+    0,
+    $sortOrder
+  ]);
   $methods = $pdo->query('SELECT * FROM payment_methods ORDER BY sort_order ASC, id ASC')->fetchAll(PDO::FETCH_ASSOC);
+}
 } catch (Throwable $e) {
   $methods = [];
 }
@@ -513,7 +549,7 @@ $layoutData = [
 $layoutJson = json_encode($layoutData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
 $storeCfg = cfg()['store'] ?? [];
-$storeNameCurrent = setting_get('store_name', $storeCfg['name'] ?? 'Get Power');
+$storeNameCurrent = setting_get('store_name', $storeCfg['name'] ?? 'Get Power Research');
 $storeEmailCurrent = setting_get('store_email', $storeCfg['support_email'] ?? 'contato@example.com');
 $storePhoneCurrent = setting_get('store_phone', $storeCfg['phone'] ?? '');
 $storeAddressCurrent = setting_get('store_address', $storeCfg['address'] ?? '');
@@ -615,14 +651,14 @@ $whatsappNumber = setting_get('whatsapp_number', '');
 $whatsappButtonText = setting_get('whatsapp_button_text', 'Fale com a gente');
 $whatsappMessage = setting_get('whatsapp_message', 'Olá! Gostaria de tirar uma dúvida sobre os produtos.');
 $headerSublineCurrent = setting_get('header_subline', 'Loja Online');
-$footerTitleCurrent = setting_get('footer_title', 'Get Power');
+$footerTitleCurrent = setting_get('footer_title', 'Get Power Research');
 $footerDescriptionCurrent = setting_get('footer_description', 'Sua loja online com experiência de app.');
 $footerCopyCurrent = setting_get('footer_copy', '© {{year}} '.($storeNameCurrent ?: 'Sua Loja').'. Todos os direitos reservados.');
 $themeColorCurrent = setting_get('theme_color', '#2060C8');
 $heroBackgroundCurrent = setting_get('hero_background', 'gradient');
 $heroAccentColorCurrent = setting_get('hero_accent_color', '#F59E0B');
-$metaTitleCurrent = setting_get('store_meta_title', ($storeNameCurrent ?: 'Get Power').' | Loja');
-$pwaNameCurrent = setting_get('pwa_name', $storeNameCurrent ?: 'Get Power');
+$metaTitleCurrent = setting_get('store_meta_title', ($storeNameCurrent ?: 'Get Power Research').' | Loja');
+$pwaNameCurrent = setting_get('pwa_name', $storeNameCurrent ?: 'Get Power Research');
 $pwaShortNameCurrent = setting_get('pwa_short_name', $pwaNameCurrent);
 $pwaIcons = get_pwa_icon_paths();
 $pwaIconPreview = pwa_icon_url(192);
@@ -798,7 +834,7 @@ $pwaIconPreview = pwa_icon_url(192);
           <div class="md:col-span-2">
             <label class="block text-sm font-medium mb-1">Título da aba (meta title)</label>
             <input class="input w-full" name="store_meta_title" maxlength="160" value="<?= sanitize_html($metaTitleCurrent); ?>">
-            <p class="hint mt-1">Aparece em <code>&lt;title&gt;</code> e no histórico do navegador. Ex.: "<?= sanitize_html($storeNameCurrent ?: 'Get Power'); ?> | Loja".</p>
+            <p class="hint mt-1">Aparece em <code>&lt;title&gt;</code> e no histórico do navegador. Ex.: "<?= sanitize_html($storeNameCurrent ?: 'Get Power Research'); ?> | Loja".</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Nome do app (PWA)</label>
@@ -911,14 +947,14 @@ $pwaIconPreview = pwa_icon_url(192);
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Código</label>
-            <?php $isDefaultCode = in_array($formRow['code'] ?? '', ['pix','zelle','venmo','paypal','square','stripe'], true); ?>
+            <?php $isDefaultCode = in_array($formRow['code'] ?? '', ['pix','zelle','venmo','paypal','square','stripe','whatsapp'], true); ?>
             <input class="input w-full" name="code" value="<?= sanitize_html($formRow['code'] ?? ''); ?>" <?= $isDefaultCode ? 'readonly' : ''; ?> placeholder="ex.: square">
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Tipo</label>
             <?php $currentType = $isDefaultCode ? ($formRow['code'] ?? 'custom') : ($formSettings['type'] ?? 'custom'); ?>
             <select class="select w-full" name="method_type" <?= $isDefaultCode ? 'disabled' : ''; ?>>
-              <?php $types = ['pix'=>'Pix','zelle'=>'Zelle','venmo'=>'Venmo','paypal'=>'PayPal','square'=>'Square','stripe'=>'Stripe','custom'=>'Personalizado']; ?>
+            <?php $types = ['pix'=>'Pix','zelle'=>'Zelle','venmo'=>'Venmo','paypal'=>'PayPal','square'=>'Cartão de crédito (Square)','stripe'=>'Stripe','whatsapp'=>'WhatsApp','custom'=>'Personalizado']; ?>
               <?php foreach ($types as $value => $label): ?>
                 <option value="<?= $value; ?>" <?= $currentType === $value ? 'selected' : ''; ?>><?= $label; ?></option>
               <?php endforeach; ?>
@@ -936,7 +972,7 @@ $pwaIconPreview = pwa_icon_url(192);
           <input class="input w-full" name="description" value="<?= sanitize_html($formRow['description'] ?? ''); ?>" placeholder="Visível apenas no painel">
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Instruções (placeholders: {valor_pedido}, {numero_pedido}, {email_cliente}, {account_label}, {account_value}, {stripe_link})</label>
+          <label class="block text-sm font-medium mb-1">Instruções (placeholders: {valor_pedido}, {valor_produtos}, {valor_frete}, {numero_pedido}, {email_cliente}, {account_label}, {account_value}, {stripe_link}, {whatsapp_link}, {whatsapp_number}, {whatsapp_message})</label>
           <textarea class="textarea w-full" name="instructions" rows="4"><?= htmlspecialchars($formRow['instructions'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
         </div>
 
@@ -990,6 +1026,21 @@ $pwaIconPreview = pwa_icon_url(192);
             <input class="input w-full" name="venmo_link" value="<?= sanitize_html($formSettings['venmo_link'] ?? ''); ?>">
           </div>
 
+          <div data-type="whatsapp">
+            <label class="block text-sm font-medium mb-1">Número WhatsApp</label>
+            <input class="input w-full" name="whatsapp_number" value="<?= sanitize_html($formSettings['number'] ?? ''); ?>" placeholder="+55 8299999-0000">
+            <p class="text-xs text-gray-500 mt-1">Informe com DDI/DD. Ex.: +55 82999990000</p>
+          </div>
+          <div data-type="whatsapp">
+            <label class="block text-sm font-medium mb-1">Mensagem padrão</label>
+            <textarea class="textarea w-full" name="whatsapp_message" rows="3" placeholder="Olá! Gostaria de finalizar meu pedido."><?= htmlspecialchars($formSettings['message'] ?? 'Olá! Gostaria de finalizar meu pedido.', ENT_QUOTES, 'UTF-8'); ?></textarea>
+          </div>
+          <div data-type="whatsapp">
+            <label class="block text-sm font-medium mb-1">Link personalizado (opcional)</label>
+            <input class="input w-full" name="whatsapp_link" value="<?= sanitize_html($formSettings['link'] ?? ''); ?>" placeholder="https://wa.me/...">
+            <p class="text-xs text-gray-500 mt-1">Se o número estiver preenchido, o link é gerado automaticamente.</p>
+          </div>
+
           <div data-type="paypal">
             <label class="block text-sm font-medium mb-1">Conta PayPal / Email</label>
             <input class="input w-full" name="paypal_business" value="<?= sanitize_html($formSettings['business'] ?? ''); ?>">
@@ -1037,19 +1088,19 @@ $pwaIconPreview = pwa_icon_url(192);
             <div>
               <label class="block text-sm font-medium mb-1">Crédito - rótulo</label>
               <input class="input w-full" name="square_credit_label" value="<?= sanitize_html($formSettings['credit_label'] ?? 'Cartão de crédito'); ?>">
-              <label class="block text-xs font-medium mt-2">Crédito - link Square</label>
+              <label class="block text-xs font-medium mt-2">Crédito - link do checkout (Square)</label>
               <input class="input w-full" name="square_credit_link" value="<?= sanitize_html($formSettings['credit_link'] ?? ''); ?>" placeholder="https://square.link/...">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Débito - rótulo</label>
               <input class="input w-full" name="square_debit_label" value="<?= sanitize_html($formSettings['debit_label'] ?? 'Cartão de débito'); ?>">
-              <label class="block text-xs font-medium mt-2">Débito - link Square</label>
+              <label class="block text-xs font-medium mt-2">Débito - link do checkout (Square)</label>
               <input class="input w-full" name="square_debit_link" value="<?= sanitize_html($formSettings['debit_link'] ?? ''); ?>" placeholder="https://square.link/...">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Afterpay - rótulo</label>
               <input class="input w-full" name="square_afterpay_label" value="<?= sanitize_html($formSettings['afterpay_label'] ?? 'Afterpay'); ?>">
-              <label class="block text-xs font-medium mt-2">Afterpay - link Square</label>
+              <label class="block text-xs font-medium mt-2">Afterpay - link do checkout (Square)</label>
               <input class="input w-full" name="square_afterpay_link" value="<?= sanitize_html($formSettings['afterpay_link'] ?? ''); ?>" placeholder="https://square.link/...">
             </div>
           </div>
@@ -1320,7 +1371,7 @@ $pwaIconPreview = pwa_icon_url(192);
         <div style="max-width:960px;margin:0 auto;border-radius:24px;background:linear-gradient(135deg,#22c55e,#14b8a6);padding:50px;color:#fff;">
           <h2 style="font-size:36px;font-weight:700;margin-bottom:18px;">Atendimento humano e entrega garantida</h2>
           <ul style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;font-size:16px;">
-            <li>✔️ Pagamentos por Pix, Zelle, Venmo, PayPal ou Square</li>
+            <li>✔️ Pagamentos por Pix, Zelle, Venmo, PayPal, Cartão de crédito (Square) ou WhatsApp</li>
             <li>✔️ Equipe especializada para auxiliar na compra e prescrição</li>
             <li>✔️ Acompanhamento do pedido em tempo real pelo painel</li>
             <li>✔️ Entregas expressas em todo território norte-americano</li>

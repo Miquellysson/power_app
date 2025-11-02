@@ -1,5 +1,5 @@
 <?php
-// lib/utils.php - Utilitários do sistema Get Power (com settings, upload de logo e helpers)
+// lib/utils.php - Utilitários do sistema Get Power Research (com settings, upload de logo e helpers)
 
 /* =========================================================================
    Carregamento de configuração (cfg)
@@ -63,7 +63,7 @@ if (!function_exists('t')) {
 if (!function_exists('get_default_dict')) {
     function get_default_dict() {
         return [
-            'title' => 'Get Power',
+            'title' => 'Get Power Research',
             'cart' => 'Carrinho',
             'search' => 'Buscar',
             'lang' => 'Idioma',
@@ -86,7 +86,8 @@ if (!function_exists('get_default_dict')) {
             'venmo' => 'Venmo',
             'pix'   => 'PIX',
             'paypal'=> 'PayPal',
-            'square'=> 'Square',
+            'square'=> 'Cartão de crédito',
+            'whatsapp'=> 'WhatsApp',
             'upload_receipt' => 'Enviar Comprovante',
             'place_order' => 'Finalizar Pedido',
             'add_to_cart' => 'Adicionar ao Carrinho',
@@ -597,13 +598,128 @@ if (!function_exists('save_pwa_icon_upload')) {
     }
 }
 
+if (!function_exists('app_base_uri')) {
+    function app_base_uri(): string {
+        static $base = null;
+        if ($base !== null) {
+            return $base;
+        }
+
+        $appReal = str_replace('\\', '/', realpath(__DIR__ . '/..'));
+        $scriptFilename = $_SERVER['SCRIPT_FILENAME'] ?? '';
+        $scriptReal = $scriptFilename ? str_replace('\\', '/', realpath($scriptFilename)) : '';
+        $scriptDirReal = $scriptReal ? str_replace('\\', '/', dirname($scriptReal)) : '';
+        $scriptUrlDir = trim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+
+        $appBaseUri = '';
+        if ($appReal && $scriptDirReal && strpos($scriptDirReal, $appReal) === 0) {
+            $relativeDir = trim(substr($scriptDirReal, strlen($appReal)), '/');
+            if ($relativeDir !== '') {
+                $levels = substr_count($relativeDir, '/') + 1;
+                $parts = $scriptUrlDir === '' ? [] : explode('/', $scriptUrlDir);
+                if ($levels < count($parts)) {
+                    $appBaseUri = implode('/', array_slice($parts, 0, count($parts) - $levels));
+                }
+            } else {
+                $appBaseUri = $scriptUrlDir;
+            }
+        } else {
+            $appBaseUri = $scriptUrlDir;
+        }
+
+        $appBaseUri = $appBaseUri !== '' ? '/' . ltrim($appBaseUri, '/') : '';
+        $base = $appBaseUri;
+        return $base;
+    }
+}
+
+if (!function_exists('app_public_path')) {
+    function app_public_path(string $path): string {
+        $path = trim((string)$path);
+        if ($path === '') {
+            return '';
+        }
+        if (preg_match('~^(?:[a-z][a-z0-9+\-.]*:|//)~i', $path)) {
+            return $path;
+        }
+
+        $fragment = '';
+        if (false !== $hashPos = strpos($path, '#')) {
+            $fragment = substr($path, $hashPos);
+            $path = substr($path, 0, $hashPos);
+        }
+
+        $query = '';
+        if (false !== $qPos = strpos($path, '?')) {
+            $query = substr($path, $qPos);
+            $path = substr($path, 0, $qPos);
+        }
+
+        $path = preg_replace('#^\./#', '', $path);
+        while (strpos($path, '../') === 0) {
+            $path = substr($path, 3);
+        }
+
+        $normalized = '/' . ltrim($path, '/');
+        if ($normalized === '//') {
+            $normalized = '/';
+        }
+
+        $base = app_base_uri();
+        if ($base !== '') {
+            if ($normalized === $base || strpos($normalized, $base . '/') === 0) {
+                $uri = $normalized;
+            } else {
+                $uri = $base . $normalized;
+            }
+        } else {
+            $uri = $normalized;
+        }
+
+        return $uri . $query . $fragment;
+    }
+}
+
 if (!function_exists('get_pwa_icon_paths')) {
     function get_pwa_icon_paths(): array {
         $defaults = [
-            512 => 'assets/icons/farma-512.png',
-        192 => 'assets/icons/farma-192.png',
-        180 => 'assets/icons/farma-192.png',
+            512 => 'assets/icons/admin-512.png',
+            192 => 'assets/icons/admin-192.png',
+            180 => 'assets/icons/admin-192.png',
         ];
+
+        $storeLogo = null;
+        if (function_exists('find_logo_path')) {
+            $storeLogo = find_logo_path();
+        } elseif (function_exists('get_logo_path')) {
+            $storeLogo = get_logo_path();
+        } else {
+            $cfgLogo = function_exists('setting_get') ? setting_get('store_logo_url') : null;
+            if ($cfgLogo) {
+                $storeLogo = ltrim((string)$cfgLogo, '/');
+            } else {
+                $candidates = [
+                    'storage/logo/logo.png',
+                    'storage/logo/logo.jpg',
+                    'storage/logo/logo.jpeg',
+                    'storage/logo/logo.webp',
+                    'assets/logo.png'
+                ];
+                foreach ($candidates as $c) {
+                    if (file_exists(__DIR__ . '/../' . $c)) {
+                        $storeLogo = $c;
+                        break;
+                    }
+                }
+            }
+        }
+        if ($storeLogo) {
+            $storeLogo = ltrim($storeLogo, '/');
+            foreach (array_keys($defaults) as $size) {
+                $defaults[$size] = $storeLogo;
+            }
+        }
+
         $paths = [];
         foreach ($defaults as $size => $fallback) {
             $custom = 'storage/pwa/icon-' . $size . '.png';
@@ -635,9 +751,12 @@ if (!function_exists('pwa_icon_url')) {
         }
         $rel = $icons[$size]['relative'];
         $abs = $icons[$size]['absolute'];
-        $url = '/' . ltrim($rel, '/');
+        $url = function_exists('app_public_path') ? app_public_path($rel) : '';
+        if ($url === '') {
+            $url = '/' . ltrim($rel, '/');
+        }
         if (file_exists($abs)) {
-            $url .= '?v=' . filemtime($abs);
+            $url .= (strpos($url, '?') !== false ? '&' : '?') . 'v=' . filemtime($abs);
         }
         return $url;
     }
@@ -659,13 +778,14 @@ if (!function_exists('formatBytes')) {
 }
 
 if (!function_exists('format_currency')) {
-    function format_currency($amount, $currency = 'BRL') {
+    function format_currency($amount, $currency = null) {
         $amount = (float)$amount;
+        $currency = strtoupper($currency ?? (cfg()['store']['currency'] ?? 'BRL'));
         switch ($currency) {
             case 'USD': return '$' . number_format($amount, 2, '.', ',');
             case 'EUR': return '€' . number_format($amount, 2, ',', '.');
-            case 'BRL':
-            default:    return 'R$ ' . number_format($amount, 2, ',', '.');
+            case 'BRL': return 'R$ ' . number_format($amount, 2, ',', '.');
+            default:    return $currency . ' ' . number_format($amount, 2, ',', '.');
         }
     }
 }
@@ -851,7 +971,7 @@ if (!function_exists('send_order_confirmation')) {
             $cfg     = cfg();
             $storeInfo = store_info();
             $storeName = $storeInfo['name'] ?? 'Sua Loja';
-            $currency = $storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD');
+            $orderCurrency = strtoupper($order['currency'] ?? ($storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD')));
 
             $defaults = email_template_defaults($storeName);
             $subjectTpl = setting_get('email_customer_subject', $defaults['customer_subject']);
@@ -862,7 +982,8 @@ if (!function_exists('send_order_confirmation')) {
                 $nm = sanitize_html($item['name'] ?? '');
                 $qt = (int)($item['qty'] ?? 0);
                 $vl = (float)($item['price'] ?? 0);
-                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $currency).'</li>';
+                $itemCurrency = $item['currency'] ?? $orderCurrency;
+                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $itemCurrency).'</li>';
             }
             $itemsHtml .= '</ul>';
 
@@ -903,9 +1024,9 @@ if (!function_exists('send_order_confirmation')) {
                 'customer_email' => sanitize_html($order['customer_email'] ?? $customer_email),
                 'customer_phone' => sanitize_html($order['customer_phone'] ?? ''),
                 'order_id' => (string)$order_id,
-                'order_total' => format_currency($totalVal, $currency),
-                'order_subtotal' => format_currency($subtotalVal, $currency),
-                'order_shipping' => format_currency($shippingVal, $currency),
+                'order_total' => format_currency($totalVal, $orderCurrency),
+                'order_subtotal' => format_currency($subtotalVal, $orderCurrency),
+                'order_shipping' => format_currency($shippingVal, $orderCurrency),
                 'order_items' => $itemsHtml,
                 'payment_method' => sanitize_html($paymentLabel),
                 'payment_reference' => sanitize_html($order['payment_ref'] ?? ''),
@@ -958,7 +1079,7 @@ if (!function_exists('send_order_admin_alert')) {
             $cfg = cfg();
             $storeInfo = store_info();
             $storeName = $storeInfo['name'] ?? ($cfg['store']['name'] ?? 'Sua Loja');
-            $currency = $storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD');
+            $orderCurrency = strtoupper($order['currency'] ?? ($storeInfo['currency'] ?? ($cfg['store']['currency'] ?? 'USD')));
 
             $defaults = email_template_defaults($storeName);
             $subjectTpl = setting_get('email_admin_subject', $defaults['admin_subject']);
@@ -969,7 +1090,8 @@ if (!function_exists('send_order_admin_alert')) {
                 $nm = sanitize_html($item['name'] ?? '');
                 $qt = (int)($item['qty'] ?? 0);
                 $vl = (float)($item['price'] ?? 0);
-                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $currency).'</li>';
+                $itemCurrency = $item['currency'] ?? $orderCurrency;
+                $itemsHtml .= '<li>'.$nm.' — Qtd: '.$qt.' — '.format_currency($vl * $qt, $itemCurrency).'</li>';
             }
             $itemsHtml .= '</ul>';
 
@@ -1004,9 +1126,9 @@ if (!function_exists('send_order_admin_alert')) {
                 'customer_name' => sanitize_html($order['customer_name'] ?? ''),
                 'customer_email' => sanitize_html($order['customer_email'] ?? ''),
                 'customer_phone' => sanitize_html($order['customer_phone'] ?? ''),
-                'order_total' => format_currency($totalVal, $currency),
-                'order_subtotal' => format_currency($subtotalVal, $currency),
-                'order_shipping' => format_currency($shippingVal, $currency),
+                'order_total' => format_currency($totalVal, $orderCurrency),
+                'order_subtotal' => format_currency($subtotalVal, $orderCurrency),
+                'order_shipping' => format_currency($shippingVal, $orderCurrency),
                 'payment_method' => sanitize_html($paymentLabel),
                 'payment_reference' => sanitize_html($order['payment_ref'] ?? ''),
                 'order_items' => $itemsHtml,
@@ -1091,12 +1213,33 @@ if (!function_exists('store_info')) {
     function store_info() {
         $cfg = cfg();
         return [
-            'name'   => setting_get('store_name',   $cfg['store']['name']   ?? 'Get Power'),
+            'name'   => setting_get('store_name',   $cfg['store']['name']   ?? 'Get Power Research'),
             'email'  => setting_get('store_email',  $cfg['store']['support_email'] ?? 'contato@example.com'),
             'phone'  => setting_get('store_phone',  $cfg['store']['phone']  ?? '(00) 00000-0000'),
             'addr'   => setting_get('store_address',$cfg['store']['address']?? 'Endereço não configurado'),
             'logo'   => get_logo_path(),
             'currency' => $cfg['store']['currency'] ?? 'BRL',
         ];
+    }
+}
+if (!function_exists('find_logo_path')) {
+    function find_logo_path(): ?string {
+        $cfgLogo = function_exists('setting_get') ? setting_get('store_logo_url') : null;
+        if ($cfgLogo) {
+            return ltrim((string)$cfgLogo, '/');
+        }
+        $candidates = [
+            'storage/logo/logo.png',
+            'storage/logo/logo.jpg',
+            'storage/logo/logo.jpeg',
+            'storage/logo/logo.webp',
+            'assets/logo.png'
+        ];
+        foreach ($candidates as $c) {
+            if (file_exists(__DIR__ . '/../' . $c)) {
+                return $c;
+            }
+        }
+        return null;
     }
 }

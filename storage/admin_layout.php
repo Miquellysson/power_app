@@ -7,7 +7,7 @@ if (!function_exists('setting_get')) { function setting_get($k,$d=null){ return 
 if (!function_exists('cfg')) { function cfg(){ return []; } }
 
 function admin_header($title='Admin'){
-  $store = setting_get('store_name', cfg()['store']['name'] ?? 'Get Power');
+  $store = setting_get('store_name', cfg()['store']['name'] ?? 'Get Power Research');
   echo '<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
   echo '<script src="https://cdn.tailwindcss.com"></script>';
   echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">';

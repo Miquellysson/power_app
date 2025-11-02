@@ -1,6 +1,6 @@
 <?php
 return [
-  'title' => 'Get Power',
+  'title' => 'Get Power Research',
   'search' => 'Buscar',
   'add_to_cart' => 'Adicionar',
   'cart' => 'Carrinho',
@@ -15,7 +15,8 @@ return [
   'venmo' => 'Venmo',
   'pix' => 'Pix',
   'paypal' => 'PayPal',
-  'square' => 'Square',
+  'square' => 'Cartão de crédito',
+  'whatsapp' => 'WhatsApp',
   'upload_receipt' => 'Enviar comprovante',
   'place_order' => 'Confirmar Pedido',
   'order_received' => 'Pedido recebido!',

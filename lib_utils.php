@@ -47,12 +47,14 @@ function setting_set($key, $value){
   }catch(Throwable $e){ return false; }
 }
 
-function find_logo_path(){
-  $cfgLogo = setting_get('store_logo_url');
-  if($cfgLogo) return $cfgLogo;
-  $candidates = ['storage/logo/logo.png','storage/logo/logo.jpg','storage/logo/logo.jpeg','storage/logo/logo.webp'];
-  foreach($candidates as $c){ if(file_exists(__DIR__.'/../'.$c)) return $c; }
-  return null;
+if (!function_exists('find_logo_path')) {
+  function find_logo_path(){
+    $cfgLogo = setting_get('store_logo_url');
+    if($cfgLogo) return $cfgLogo;
+    $candidates = ['storage/logo/logo.png','storage/logo/logo.jpg','storage/logo/logo.jpeg','storage/logo/logo.webp'];
+    foreach($candidates as $c){ if(file_exists(__DIR__.'/../'.$c)) return $c; }
+    return null;
+  }
 }
 
 // Email simplificado (usa suporte do PHP)

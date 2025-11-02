@@ -7,7 +7,7 @@ if (!function_exists('setting_get')) { function setting_get($k,$d=null){ return 
 if (!function_exists('cfg')) { function cfg(){ return []; } }
 
 function admin_header($title='Admin'){
-  $store = setting_get('store_name', (cfg()['store']['name'] ?? 'Get Power'));
+  $store = setting_get('store_name', (cfg()['store']['name'] ?? 'Get Power Research'));
   $themeColor = setting_get('theme_color', '#2060C8');
   $defaultPalette = [
       'DEFAULT' => '#2060C8',

@@ -1,5 +1,5 @@
 <?php
-// index.php — Loja Get Power com UI estilo app (responsiva + PWA + categorias + carrinho/checkout)
+// index.php — Loja Get Power Research com UI estilo app (responsiva + PWA + categorias + carrinho/checkout)
 // Versão com: tema vermelho/âmbar, cache-busting, endpoint CSRF ao vivo, CSRF em header, e fetch com credenciais.
 // Requisitos: config.php, lib/db.php, lib/utils.php, (opcional) bootstrap.php para no-cache e asset_url()
 
@@ -190,6 +190,31 @@ function load_payment_methods(PDO $pdo, array $cfg): array {
     $cache = [];
   }
 
+  $cacheCodes = [];
+  foreach ($cache as $m) {
+    $cacheCodes[$m['code']] = true;
+  }
+  $paymentsCfg = $cfg['payments'] ?? [];
+  if (!isset($cacheCodes['whatsapp']) && !empty($paymentsCfg['whatsapp']['enabled'])) {
+    $whatsMethod = [
+      'code' => 'whatsapp',
+      'name' => 'WhatsApp',
+      'description' => '',
+      'instructions' => $paymentsCfg['whatsapp']['instructions'] ?? 'Converse com nossa equipe pelo WhatsApp para concluir: {whatsapp_link}.',
+      'settings' => [
+        'type' => 'whatsapp',
+        'account_label' => 'WhatsApp',
+        'account_value' => $paymentsCfg['whatsapp']['number'] ?? '',
+        'number' => $paymentsCfg['whatsapp']['number'] ?? '',
+        'message' => $paymentsCfg['whatsapp']['message'] ?? 'Olá! Gostaria de finalizar meu pedido.',
+        'link' => $paymentsCfg['whatsapp']['link'] ?? ''
+      ],
+      'icon_path' => null,
+      'require_receipt' => 0,
+    ];
+    $cache[] = $whatsMethod;
+  }
+
   if (!$cache) {
     $paymentsCfg = $cfg['payments'] ?? [];
     $defaults = [];
@@ -213,7 +238,7 @@ function load_payment_methods(PDO $pdo, array $cfg): array {
       $defaults[] = [
         'code' => 'zelle',
         'name' => 'Zelle',
-        'instructions' => "Envie {valor_pedido} via Zelle para {account_value}.",
+        'instructions' => "Envie {valor_pedido} via Zelle ({valor_produtos} + frete {valor_frete}) para {account_value}.",
         'settings' => [
           'type' => 'zelle',
           'account_label' => 'Conta Zelle',
@@ -254,14 +279,30 @@ function load_payment_methods(PDO $pdo, array $cfg): array {
         'require_receipt' => 0
       ];
     }
+    if (!empty($paymentsCfg['whatsapp']['enabled'])) {
+      $defaults[] = [
+        'code' => 'whatsapp',
+        'name' => 'WhatsApp',
+        'instructions' => $paymentsCfg['whatsapp']['instructions'] ?? 'Converse com nossa equipe pelo WhatsApp para concluir: {whatsapp_link}.',
+        'settings' => [
+          'type' => 'whatsapp',
+          'account_label' => 'WhatsApp',
+          'account_value' => $paymentsCfg['whatsapp']['number'] ?? '',
+          'number' => $paymentsCfg['whatsapp']['number'] ?? '',
+          'message' => $paymentsCfg['whatsapp']['message'] ?? 'Olá! Gostaria de finalizar meu pedido.',
+          'link' => $paymentsCfg['whatsapp']['link'] ?? ''
+        ],
+        'require_receipt' => 0
+      ];
+    }
     if (!empty($paymentsCfg['square']['enabled'])) {
       $defaults[] = [
         'code' => 'square',
-        'name' => 'Square',
-        'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout Square em uma nova aba.',
+        'name' => 'Cartão de crédito',
+        'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout de cartão de crédito em uma nova aba.',
         'settings' => [
           'type' => 'square',
-          'account_label' => 'Pagamento Square',
+          'account_label' => 'Pagamento com cartão de crédito',
           'account_value' => '',
           'mode' => 'square_product_link',
           'open_new_tab' => !empty($paymentsCfg['square']['open_new_tab'])
@@ -290,10 +331,26 @@ function load_payment_methods(PDO $pdo, array $cfg): array {
   return $cache;
 }
 
-function payment_placeholders(array $method, float $totalValue, ?int $orderId = null, ?string $customerEmail = null): array {
+function payment_placeholders(
+  array $method,
+  float $totalValue,
+  ?int $orderId = null,
+  ?string $customerEmail = null,
+  ?float $subtotalValue = null,
+  ?float $shippingValue = null,
+  ?string $currencyOverride = null
+): array {
   $settings = $method['settings'] ?? [];
+  $currency = $currencyOverride ?: ($settings['currency'] ?? (cfg()['store']['currency'] ?? 'USD'));
+  $subtotalValue = ($subtotalValue === null) ? $totalValue : $subtotalValue;
+  $shippingValue = ($shippingValue === null) ? 0.0 : $shippingValue;
   $placeholders = [
-    '{valor_pedido}' => format_currency($totalValue, cfg()['store']['currency'] ?? 'USD'),
+    '{valor_pedido}' => format_currency($totalValue, $currency),
+    '{valor_total}' => format_currency($totalValue, $currency),
+    '{valor_total_com_frete}' => format_currency($totalValue, $currency),
+    '{valor_produtos}' => format_currency($subtotalValue, $currency),
+    '{valor_subtotal}' => format_currency($subtotalValue, $currency),
+    '{valor_frete}' => format_currency($shippingValue, $currency),
     '{numero_pedido}' => $orderId ? (string)$orderId : '',
     '{email_cliente}' => $customerEmail ?? '',
     '{account_label}' => $settings['account_label'] ?? '',
@@ -305,6 +362,27 @@ function payment_placeholders(array $method, float $totalValue, ?int $orderId = 
     '{paypal_business}' => $settings['business'] ?? '',
     '{stripe_link}' => $settings['redirect_url'] ?? '',
   ];
+  $waNumberRaw = trim((string)($settings['number'] ?? $settings['account_value'] ?? ''));
+  $waMessage = trim((string)($settings['message'] ?? ''));
+  $waLinkCustom = trim((string)($settings['link'] ?? ''));
+  $waNumberDigits = preg_replace('/\D+/', '', $waNumberRaw);
+  $waLink = $waLinkCustom;
+  if ($waNumberDigits !== '') {
+    $waLink = 'https://wa.me/'.$waNumberDigits;
+    if ($waMessage !== '') {
+      $waLink .= '?text='.rawurlencode($waMessage);
+    }
+  }
+  if ($waLink === '' && $waNumberRaw !== '') {
+    $waLink = $waNumberRaw;
+  }
+  if ($waLink === '' && !empty($settings['account_value'])) {
+    $waLink = $settings['account_value'];
+  }
+  $placeholders['{whatsapp_number}'] = $waNumberRaw !== '' ? $waNumberRaw : ($waNumberDigits !== '' ? '+' . $waNumberDigits : '');
+  $placeholders['{whatsapp_link}'] = $waLink;
+  $placeholders['{whatsapp_message}'] = $waMessage;
+
   return $placeholders;
 }
 
@@ -328,8 +406,8 @@ function app_header() {
       $logoUrl .= '?v='.filemtime($absLogo);
     }
   }
-  $metaTitle = setting_get('store_meta_title', (($cfg['store']['name'] ?? 'Get Power').' | Loja'));
-  $pwaName = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power');
+  $metaTitle = setting_get('store_meta_title', (($cfg['store']['name'] ?? 'Get Power Research').' | Loja'));
+  $pwaName = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power Research');
   $pwaShortName = setting_get('pwa_short_name', $pwaName);
   $pwaIconApple = pwa_icon_url(180);
   $pwaIcon512 = pwa_icon_url(512);
@@ -343,7 +421,7 @@ function app_header() {
   echo '<!doctype html><html lang="'.htmlspecialchars($lang).'"><head>';
   echo '  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
   echo '  <title>'.htmlspecialchars($metaTitle, ENT_QUOTES, 'UTF-8').'</title>';
-  $defaultDescription = setting_get('store_meta_description', ($cfg['store']['name'] ?? 'Get Power').' — experiência tipo app: rápida, responsiva e segura.');
+  $defaultDescription = setting_get('store_meta_description', ($cfg['store']['name'] ?? 'Get Power Research').' — experiência tipo app: rápida, responsiva e segura.');
   echo '  <meta name="description" content="'.htmlspecialchars($defaultDescription, ENT_QUOTES, 'UTF-8').'">';
   echo '  <link rel="manifest" href="/manifest.php">';
   $themeColor = setting_get('theme_color', '#2060C8');
@@ -351,12 +429,12 @@ function app_header() {
   echo '  <meta name="application-name" content="'.htmlspecialchars($pwaShortName, ENT_QUOTES, 'UTF-8').'">';
 
   // ====== iOS PWA (suporte ao Add to Home Screen) ======
-  $appleIconHref = $pwaIconApple ?: '/assets/icons/farma-192.png';
+  $appleIconHref = $pwaIconApple ?: '/assets/icons/admin-192.png';
   echo '  <link rel="apple-touch-icon" href="'.htmlspecialchars($appleIconHref, ENT_QUOTES, 'UTF-8').'">';
   echo '  <meta name="apple-mobile-web-app-capable" content="yes">';
   echo '  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">';
   echo '  <meta name="apple-mobile-web-app-title" content="'.htmlspecialchars($pwaName, ENT_QUOTES, 'UTF-8').'">';
-  echo '  <link rel="icon" type="image/png" sizes="512x512" href="'.htmlspecialchars($pwaIcon512 ?: '/assets/icons/farma-512.png', ENT_QUOTES, 'UTF-8').'">';
+  echo '  <link rel="icon" type="image/png" sizes="512x512" href="'.htmlspecialchars($pwaIcon512 ?: '/assets/icons/admin-512.png', ENT_QUOTES, 'UTF-8').'">';
 
   echo '  <script src="https://cdn.tailwindcss.com"></script>';
   $brandPalette = generate_brand_palette($themeColor);
@@ -384,7 +462,13 @@ function app_header() {
           .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
           .product-card:hover img{transform: scale(1.05)}
         </style>';
-  echo '</head><body class="bg-gray-50 text-gray-800 min-h-screen">';
+  $squareLoadingUrl = 'square-loading.html';
+  $squareLoadingFile = __DIR__.'/square-loading.html';
+  if (is_file($squareLoadingFile)) {
+    $squareLoadingUrl .= '?v='.filemtime($squareLoadingFile);
+  }
+  $bodyAttrs = 'class="bg-gray-50 text-gray-800 min-h-screen" data-square-loading-url="'.htmlspecialchars($squareLoadingUrl, ENT_QUOTES, 'UTF-8').'"';
+  echo '</head><body '.$bodyAttrs.'>';
 
   // Topbar (estilo app) — sticky + blur
   echo '<header class="sticky top-0 z-40 border-b bg-white/90 blur-bg">';
@@ -396,16 +480,16 @@ function app_header() {
     echo '      <div class="w-16 h-16 rounded-2xl bg-brand-600 text-white grid place-items-center text-2xl"><i class="fas fa-pills"></i></div>';
   }
   echo '      <div>';
-  $store_name = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power');
+  $storeNameHeader = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power Research');
   $headerSubline = setting_get('header_subline', 'Loja Online');
-  echo '        <div class="font-semibold leading-tight">'.htmlspecialchars($store_name).'</div>';
+  echo '        <div class="font-semibold leading-tight">'.htmlspecialchars($storeNameHeader, ENT_QUOTES, 'UTF-8').'</div>';
   echo '        <div class="text-xs text-gray-500">'.htmlspecialchars($headerSubline, ENT_QUOTES, 'UTF-8').'</div>';
   echo '      </div>';
   echo '    </a>';
 
   echo '    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0">';
   // Botão A2HS (Add to Home Screen)
-  echo '      <button id="btnA2HS" class="a2hs-btn hidden px-3 py-2 rounded-lg text-brand-600 bg-brand-50 hover:bg-brand-100 text-sm"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Adicionar</button>';
+  echo '      <button id="btnA2HS" class="a2hs-btn hidden px-3 py-2 rounded-lg text-brand-600 bg-brand-50 hover:bg-brand-100 text-sm"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Instalar app</button>';
 
   // Troca de idioma
   echo '      <div class="relative">';
@@ -450,7 +534,7 @@ function app_footer() {
   echo '<footer class="mt-12 bg-white border-t">';
   echo '  <div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-4 gap-8 text-sm">';
   echo '    <div>';
-  $footerTitle = setting_get('footer_title', 'Get Power');
+  $footerTitle = setting_get('footer_title', 'Get Power Research');
   $footerDescription = setting_get('footer_description', 'Sua loja online com experiência de app.');
   echo '      <div class="font-semibold mb-2">'.htmlspecialchars($footerTitle, ENT_QUOTES, 'UTF-8').'</div>';
   echo '      <p class="text-gray-500">'.htmlspecialchars($footerDescription, ENT_QUOTES, 'UTF-8').'</p>';
@@ -460,15 +544,16 @@ function app_footer() {
   echo '      <ul class="space-y-2 text-gray-600">';
   echo '        <li><a class="hover:text-brand-700" href="?route=home">Início</a></li>';
   echo '        <li><a class="hover:text-brand-700" href="?route=cart">Carrinho</a></li>';
-  echo '        <li><a class="hover:text-brand-700" href="#" onclick="installPrompt()"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Adicionar ao celular</a></li>';
+  echo '        <li><a class="hover:text-brand-700" href="#" onclick="installPrompt()"><i class="fa-solid fa-mobile-screen-button mr-1"></i> Instalar app</a></li>';
   echo '      </ul>';
   echo '    </div>';
   echo '    <div>';
   echo '      <div class="font-semibold mb-2">Contato</div>';
   echo '      <ul class="space-y-2 text-gray-600">';
-  echo '        <li><i class="fa-solid fa-envelope mr-2"></i>'.htmlspecialchars(setting_get('store_email', $GLOBALS['cfg']['store']['support_email'] ?? 'contato@farmafacil.com')).'</li>';
-  echo '        <li><i class="fa-solid fa-phone mr-2"></i>'.htmlspecialchars(setting_get('store_phone', $GLOBALS['cfg']['store']['phone'] ?? '(82) 99999-9999')).'</li>';
-  echo '        <li><i class="fa-solid fa-location-dot mr-2"></i>'.htmlspecialchars(setting_get('store_address', $GLOBALS['cfg']['store']['address'] ?? 'Maceió - AL')).'</li>';
+  $storeConfig = cfg();
+  echo '        <li><i class="fa-solid fa-envelope mr-2"></i>'.htmlspecialchars(setting_get('store_email', $storeConfig['store']['support_email'] ?? 'contato@getpowerresearch.com')).'</li>';
+  echo '        <li><i class="fa-solid fa-phone mr-2"></i>'.htmlspecialchars(setting_get('store_phone', $storeConfig['store']['phone'] ?? '(82) 99999-9999')).'</li>';
+  echo '        <li><i class="fa-solid fa-location-dot mr-2"></i>'.htmlspecialchars(setting_get('store_address', $storeConfig['store']['address'] ?? 'Maceió - AL')).'</li>';
   echo '      </ul>';
   echo '    </div>';
   echo '    <div>';
@@ -480,10 +565,11 @@ function app_footer() {
   echo '      </div>';
   echo '    </div>';
   echo '  </div>';
-  $footerCopyTpl = setting_get('footer_copy', '© {{year}} '.$store_name.'. Todos os direitos reservados.');
+  $storeNameFooter = setting_get('store_name', $storeConfig['store']['name'] ?? 'Get Power Research');
+  $footerCopyTpl = setting_get('footer_copy', '© {{year}} {{store_name}}. Todos os direitos reservados.');
   $footerCopyText = strtr($footerCopyTpl, [
     '{{year}}' => date('Y'),
-    '{{store_name}}' => $store_name,
+    '{{store_name}}' => $storeNameFooter,
   ]);
   echo '  <div class="text-center text-xs text-gray-500 py-4 border-t">'.sanitize_html($footerCopyText).'</div>';
   echo '</footer>';
@@ -573,6 +659,9 @@ function app_footer() {
       document.getElementById("ios-a2hs-close")?.addEventListener("click", () => overlay.remove());
       overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
     }
+
+    // Deixa o botão visível por padrão como fallback
+    ensureBtn();
 
     // Chrome/Android/desktop: evento nativo
     window.addEventListener("beforeinstallprompt", (e) => {
@@ -884,9 +973,10 @@ if ($route === 'home') {
       $descHtml = htmlspecialchars($fp['description'] ?? '', ENT_QUOTES, 'UTF-8');
       $categoryHtml = $fp['category_name'] ? htmlspecialchars($fp['category_name'], ENT_QUOTES, 'UTF-8') : 'Sem categoria';
       $priceValue = (float)($fp['price'] ?? 0);
-      $priceFormatted = '$ '.number_format($priceValue, 2, ',', '.');
+      $productCurrency = strtoupper($fp['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+      $priceFormatted = format_currency($priceValue, $productCurrency);
       $compareValue = isset($fp['price_compare']) ? (float)$fp['price_compare'] : null;
-      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? '$ '.number_format($compareValue, 2, ',', '.') : '';
+      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? format_currency($compareValue, $productCurrency) : '';
       $savingBadge = '';
       if ($compareValue && $compareValue > $priceValue && $compareValue > 0) {
         $savingPercent = max(1, min(90, (int)round((($compareValue - $priceValue) / $compareValue) * 100)));
@@ -969,9 +1059,10 @@ if ($route === 'home') {
       $img = proxy_img($img); // passa pelo proxy se for URL absoluta
       $in_stock = ((int)$p['stock'] > 0);
       $priceValue = (float)($p['price'] ?? 0);
-      $priceFormatted = '$ '.number_format($priceValue, 2, ',', '.');
+      $productCurrency = strtoupper($p['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+      $priceFormatted = format_currency($priceValue, $productCurrency);
       $compareValue = isset($p['price_compare']) ? (float)$p['price_compare'] : null;
-      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? '$ '.number_format($compareValue, 2, ',', '.') : '';
+      $compareFormatted = ($compareValue && $compareValue > $priceValue) ? format_currency($compareValue, $productCurrency) : '';
       echo '<div class="product-card card rounded-2xl shadow hover:shadow-lg transition overflow-hidden">';
       echo '  <div class="relative h-48 overflow-hidden">';
         echo '    <img src="'.htmlspecialchars($img).'" class="w-full h-full object-cover transition-transform duration-300" alt="'.htmlspecialchars($p['name']).'">';
@@ -999,7 +1090,7 @@ if ($route === 'home') {
       echo '    </div>';
       echo '    <div class="pt-2">';
       if ($in_stock) {
-        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-600 text-white hover:bg-brand-700 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name'], ENT_QUOTES, 'UTF-8').'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Adicionar</button>';
+        echo '    <button class="w-full px-4 py-3 rounded-xl bg-brand-600 text-white hover:bg-brand-700 btn" onclick="addToCart('.(int)$p['id'].', \''.htmlspecialchars($p['name'], ENT_QUOTES, 'UTF-8').'\')"><i class="fa-solid fa-cart-plus mr-2"></i>Comprar agora</button>';
       } else {
         echo '    <button class="w-full px-4 py-3 rounded-xl bg-gray-300 text-gray-600 cursor-not-allowed"><i class="fa-solid fa-ban mr-2"></i>Indisponível</button>';
       }
@@ -1053,7 +1144,6 @@ if ($route === 'account') {
     $ordersList = $ordersStmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
-  $currency = $cfg['store']['currency'] ?? 'USD';
   $statusMap = [
     'pending' => ['Pendente', 'bg-amber-100 text-amber-700'],
     'paid' => ['Pago', 'bg-emerald-100 text-emerald-700'],
@@ -1112,9 +1202,10 @@ if ($route === 'account') {
         $statusInfo = $statusMap[$statusKey] ?? [ucfirst($statusKey ?: 'Desconhecido'), 'bg-gray-100 text-gray-600'];
         $items = json_decode($order['items_json'] ?? '[]', true);
         if (!is_array($items)) { $items = []; }
-        $total = format_currency((float)($order['total'] ?? 0), $currency);
-        $shippingCost = format_currency((float)($order['shipping_cost'] ?? 0), $currency);
-        $subtotal = format_currency((float)($order['subtotal'] ?? 0), $currency);
+        $orderCurrency = strtoupper($order['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+        $total = format_currency((float)($order['total'] ?? 0), $orderCurrency);
+        $shippingCost = format_currency((float)($order['shipping_cost'] ?? 0), $orderCurrency);
+        $subtotal = format_currency((float)($order['subtotal'] ?? 0), $orderCurrency);
         $track = trim((string)($order['track_token'] ?? ''));
 
         echo '    <div class="border border-gray-100 rounded-2xl p-5 space-y-4">';
@@ -1131,7 +1222,7 @@ if ($route === 'account') {
           foreach ($items as $item) {
             $itemName = htmlspecialchars((string)($item['name'] ?? ''), ENT_QUOTES, 'UTF-8');
             $itemQty = (int)($item['qty'] ?? 0);
-            $itemPrice = format_currency((float)($item['price'] ?? 0), $currency);
+            $itemPrice = format_currency((float)($item['price'] ?? 0), $item['currency'] ?? $orderCurrency);
             echo '        <div class="flex items-center justify-between text-sm border-b border-dotted pb-1">';
             echo '          <span>'.$itemName.' <span class="text-gray-500">(Qtd: '.$itemQty.')</span></span>';
             echo '          <span>'.$itemPrice.'</span>';
@@ -1177,11 +1268,20 @@ if ($route === 'add_cart' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   $pdo = db();
   $id  = (int)($_POST['id'] ?? 0);
 
-  $st = $pdo->prepare("SELECT id, name, stock, active FROM products WHERE id=? AND active=1");
+  $st = $pdo->prepare("SELECT id, name, stock, active, currency FROM products WHERE id=? AND active=1");
   $st->execute([$id]);
   $prod = $st->fetch();
   if (!$prod) { echo json_encode(['success'=>false,'error'=>'Produto não encontrado']); exit; }
   if ((int)$prod['stock'] <= 0) { echo json_encode(['success'=>false,'error'=>'Produto fora de estoque']); exit; }
+
+  $productCurrency = strtoupper($prod['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+  $cartCurrency = $_SESSION['cart_currency'] ?? null;
+  if ($cartCurrency === null) {
+    $_SESSION['cart_currency'] = $productCurrency;
+  } elseif ($cartCurrency !== $productCurrency) {
+    echo json_encode(['success'=>false,'error'=>'Carrinho aceita apenas produtos na moeda '.$cartCurrency.'. Remova itens anteriores para adicionar este.']);
+    exit;
+  }
 
   if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
   $_SESSION['cart'][$id] = ($_SESSION['cart'][$id] ?? 0) + 1;
@@ -1205,38 +1305,59 @@ if ($route === 'cart') {
   $items = [];
   $subtotal = 0.0;
   $shippingTotal = 0.0;
+  $cartCurrency = $_SESSION['cart_currency'] ?? null;
+  $currencyMismatch = false;
 
   if ($ids) {
     $in = implode(',', array_fill(0, count($ids), '?'));
     $st = $pdo->prepare("SELECT * FROM products WHERE id IN ($in) AND active=1");
     $st->execute($ids);
     foreach ($st as $p) {
-      $qty = (int)($cart[$p['id']] ?? 0);
-      $line = (float)$p['price'] * $qty;
+      $pid = (int)$p['id'];
+      if (!isset($cart[$pid])) { continue; }
+      $qty = (int)$cart[$pid];
+      if ($qty <= 0) { continue; }
+      $productCurrency = strtoupper($p['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+      if ($cartCurrency === null) {
+        $cartCurrency = $productCurrency;
+        $_SESSION['cart_currency'] = $cartCurrency;
+      } elseif ($cartCurrency !== $productCurrency) {
+        $currencyMismatch = true;
+      }
+      $priceValue = (float)$p['price'];
+      $line = $priceValue * $qty;
       $subtotal += $line;
       $ship = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
       if ($ship < 0) { $ship = 0; }
       $shippingTotal += $ship * $qty;
       $items[] = [
-        'id'=>(int)$p['id'],
+        'id'=>$pid,
         'sku'=>$p['sku'],
         'name'=>$p['name'],
-        'price'=>(float)$p['price'],
+        'price'=>$priceValue,
         'qty'=>$qty,
         'image'=>$p['image_path'],
         'stock'=>(int)$p['stock'],
-        'shipping_cost'=>$ship
+        'shipping_cost'=>$ship,
+        'currency'=>$productCurrency
       ];
     }
   }
 
   $shippingTotal = max(0, $shippingTotal);
   $cartTotal = $subtotal + $shippingTotal;
+  if ($cartCurrency === null) {
+    $cartCurrency = $cfg['store']['currency'] ?? 'USD';
+  }
 
   echo '<section class="max-w-5xl mx-auto px-4 py-8">';
   echo '  <h2 class="text-2xl font-bold mb-6"><i class="fa-solid fa-bag-shopping mr-2 text-brand-700"></i>'.htmlspecialchars($d['cart'] ?? 'Carrinho').'</h2>';
+  if ($currencyMismatch) {
+    echo '  <div class="mb-4 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 flex items-start gap-3"><i class="fa-solid fa-circle-exclamation mt-1"></i><span>Há produtos com moedas diferentes no carrinho. Ajuste os itens para uma única moeda antes de finalizar.</span></div>';
+  }
 
   if (!$items) {
+    unset($_SESSION['cart_currency']);
     echo '<div class="text-center py-16">';
     echo '  <i class="fa-solid fa-cart-shopping text-6xl text-gray-300 mb-4"></i>';
     echo '  <div class="text-gray-600 mb-6">Seu carrinho está vazio</div>';
@@ -1248,39 +1369,42 @@ if ($route === 'cart') {
     foreach ($items as $it) {
       $img = $it['image'] ?: 'assets/no-image.png';
       $img = proxy_img($img); // passa pelo proxy se for URL absoluta
-      echo '  <div class="p-4 flex items-center gap-4">';
-      echo '    <img src="'.htmlspecialchars($img).'" class="w-20 h-20 object-cover rounded-lg" alt="produto">';
-      echo '    <div class="flex-1">';
-      echo '      <div class="font-semibold">'.htmlspecialchars($it['name']).'</div>';
-      echo '      <div class="text-xs text-gray-500">SKU: '.htmlspecialchars($it['sku']).'</div>';
-      echo '      <div class="text-brand-700 font-bold mt-1">$ '.number_format($it['price'],2,',','.').'</div>';
+      echo '  <div class="p-4 flex flex-col gap-4 md:flex-row md:items-center">';
+      echo '    <div class="flex-shrink-0 mx-auto md:mx-0">';
+      echo '      <img src="'.htmlspecialchars($img).'" class="w-24 h-24 md:w-20 md:h-20 object-cover rounded-lg" alt="produto">';
       echo '    </div>';
-      echo '    <div class="flex items-center gap-2">';
+      echo '    <div class="flex-1 text-center md:text-left">';
+      echo '      <div class="font-semibold">'.htmlspecialchars($it['name']).'</div>';
+      echo '      <div class="text-xs text-gray-500 mt-1">SKU: '.htmlspecialchars($it['sku']).'</div>';
+      $itemCurrency = $it['currency'] ?? $cartCurrency;
+      echo '      <div class="text-brand-700 font-bold mt-2">'.format_currency($it['price'], $itemCurrency).'</div>';
+      echo '    </div>';
+      echo '    <div class="flex items-center justify-center md:justify-start gap-2">';
       echo '      <button class="w-8 h-8 rounded-full bg-gray-200" onclick="updateQuantity('.(int)$it['id'].', -1)">-</button>';
-      echo '      <span class="w-10 text-center font-semibold">'.(int)$it['qty'].'</span>';
+      echo '      <span class="w-12 text-center font-semibold">'.(int)$it['qty'].'</span>';
       echo '      <button class="w-8 h-8 rounded-full bg-gray-200" onclick="updateQuantity('.(int)$it['id'].', 1)">+</button>';
       echo '    </div>';
-      echo '    <div class="text-right w-28 font-semibold">$ '.number_format($it['price']*$it['qty'],2,',','.').'</div>';
-      echo '    <a class="text-red-500 text-sm ml-2" href="?route=remove_cart&id='.(int)$it['id'].'&csrf='.csrf_token().'">Remover</a>';
+      echo '    <div class="font-semibold text-lg md:text-right md:w-32 text-center">'.format_currency($it['price']*$it['qty'], $itemCurrency).'</div>';
+      echo '    <a class="text-red-500 text-sm text-center md:text-left" href="?route=remove_cart&id='.(int)$it['id'].'&csrf='.csrf_token().'">Remover</a>';
       echo '  </div>';
     }
     echo '  </div>';
     echo '  <div class="p-4 bg-gray-50 space-y-2">';
-    echo '    <div class="flex items-center justify-between">';
-    echo '      <span class="text-lg font-semibold">Subtotal</span>';
-    echo '      <span class="text-2xl font-bold text-brand-700">$ '.number_format($subtotal,2,',','.').'</span>';
+    echo '    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">';
+    echo '      <span class="text-lg font-semibold text-center sm:text-left">Subtotal</span>';
+    echo '      <span class="text-2xl font-bold text-brand-700 text-center sm:text-right">'.format_currency($subtotal, $cartCurrency).'</span>';
     echo '    </div>';
-    echo '    <div class="flex items-center justify-between text-sm text-gray-600">';
-    echo '      <span>Frete</span>';
-    echo '      <span class="font-semibold">$ '.number_format($shippingTotal,2,',','.').'</span>';
+    echo '    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600 gap-2">';
+    echo '      <span class="text-center sm:text-left">Frete</span>';
+    echo '      <span class="font-semibold text-center sm:text-right">'.format_currency($shippingTotal, $cartCurrency).'</span>';
     echo '    </div>';
-    echo '    <div class="flex items-center justify-between text-lg font-bold">';
-    echo '      <span>Total</span>';
-    echo '      <span class="text-brand-700 text-2xl">$ '.number_format($cartTotal,2,',','.').'</span>';
+    echo '    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-lg font-bold gap-2">';
+    echo '      <span class="text-center sm:text-left">Total</span>';
+    echo '      <span class="text-brand-700 text-2xl text-center sm:text-right">'.format_currency($cartTotal, $cartCurrency).'</span>';
     echo '    </div>';
     echo '  </div>';
-    echo '  <div class="p-4 flex gap-3">';
-    echo '    <a href="?route=home" class="px-5 py-3 rounded-lg border">Continuar comprando</a>';
+    echo '  <div class="p-4 flex flex-col sm:flex-row gap-3">';
+    echo '    <a href="?route=home" class="px-5 py-3 rounded-lg border text-center sm:w-auto">Continuar comprando</a>';
     echo '    <a href="?route=checkout" class="flex-1 px-5 py-3 rounded-lg bg-brand-600 text-white text-center hover:bg-brand-700">'.htmlspecialchars($d["checkout"] ?? "Finalizar Compra").'</a>';
     echo '  </div>';
     echo '</div>';
@@ -1296,6 +1420,9 @@ if ($route === 'remove_cart') {
   if (!csrf_check($_GET['csrf'] ?? '')) die('CSRF inválido');
   $id = (int)($_GET['id'] ?? 0);
   if ($id > 0 && isset($_SESSION['cart'][$id])) unset($_SESSION['cart'][$id]);
+  if (empty($_SESSION['cart'])) {
+    unset($_SESSION['cart_currency']);
+  }
   header('Location: ?route=cart');
   exit;
 }
@@ -1313,13 +1440,27 @@ if ($route === 'update_cart' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($new === 0) { unset($cart[$id]); }
   else {
     $pdo = db();
-    $st = $pdo->prepare("SELECT stock FROM products WHERE id=? AND active=1");
+    $st = $pdo->prepare("SELECT stock, currency FROM products WHERE id=? AND active=1");
     $st->execute([$id]);
-    $stock = (int)($st->fetchColumn() ?: 0);
+    $prodRow = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$prodRow) {
+      echo json_encode(['ok'=>false,'error'=>'Produto indisponível']); exit;
+    }
+    $productCurrency = strtoupper($prodRow['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+    $cartCurrency = $_SESSION['cart_currency'] ?? null;
+    if ($cartCurrency === null) {
+      $_SESSION['cart_currency'] = $productCurrency;
+    } elseif ($cartCurrency !== $productCurrency) {
+      echo json_encode(['ok'=>false,'error'=>'Carrinho aceita apenas produtos na moeda '.$cartCurrency.'.']); exit;
+    }
+    $stock = (int)($prodRow['stock'] ?? 0);
     if ($stock > 0) $new = min($new, $stock);
     $cart[$id] = $new;
   }
   $_SESSION['cart'] = $cart;
+  if (empty($_SESSION['cart'])) {
+    unset($_SESSION['cart_currency']);
+  }
   echo json_encode(['ok'=>true,'qty'=>($cart[$id] ?? 0)]); exit;
 }
 
@@ -1335,19 +1476,49 @@ if ($route === 'checkout') {
   $pdo = db();
   $ids = array_keys($cart);
   $in  = implode(',', array_fill(0, count($ids), '?'));
-  $st  = $pdo->prepare("SELECT id, name, price, stock, shipping_cost FROM products WHERE id IN ($in) AND active=1");
+  $st  = $pdo->prepare("SELECT id, name, price, stock, shipping_cost, currency FROM products WHERE id IN ($in) AND active=1");
   $st->execute($ids);
   $items = []; $subtotal = 0.0; $shipping = 0.0;
+  $cartCurrency = $_SESSION['cart_currency'] ?? null;
+  $currencyMismatch = false;
   foreach ($st as $p) {
-    $qty = (int)($cart[$p['id']] ?? 0);
+    $pid = (int)$p['id'];
+    if (!isset($cart[$pid])) { continue; }
+    $qty = (int)$cart[$pid];
+    if ($qty <= 0) { continue; }
+    $productCurrency = strtoupper($p['currency'] ?? ($cfg['store']['currency'] ?? 'USD'));
+    if ($cartCurrency === null) {
+      $cartCurrency = $productCurrency;
+    } elseif ($cartCurrency !== $productCurrency) {
+      $currencyMismatch = true;
+    }
     $shipCost = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
     if ($shipCost < 0) { $shipCost = 0; }
-    $items[] = ['id'=>(int)$p['id'], 'name'=>$p['name'], 'price'=>(float)$p['price'], 'qty'=>$qty, 'shipping_cost'=>$shipCost];
-    $subtotal += (float)$p['price'] * $qty;
+    $priceValue = (float)$p['price'];
+    $items[] = [
+      'id'=>$pid,
+      'name'=>$p['name'],
+      'price'=>$priceValue,
+      'qty'=>$qty,
+      'shipping_cost'=>$shipCost,
+      'currency'=>$productCurrency
+    ];
+    $subtotal += $priceValue * $qty;
     $shipping += $shipCost * $qty;
   }
   $shipping = max(0, $shipping);
   $total = $subtotal + $shipping;
+  if ($cartCurrency === null) {
+    $cartCurrency = $cfg['store']['currency'] ?? 'USD';
+  }
+  if ($currencyMismatch) {
+    $_SESSION['checkout_error'] = 'Carrinho contém produtos em moedas diferentes. Ajuste os itens antes de finalizar.';
+    header('Location: ?route=cart');
+    exit;
+  }
+
+  $_SESSION['cart_currency'] = $cartCurrency;
+  $currencyCode = $cartCurrency;
 
   // Métodos de pagamento dinâmicos
   $paymentMethods = load_payment_methods($pdo, $cfg);
@@ -1389,6 +1560,7 @@ if ($route === 'checkout') {
       $settings = $pm['settings'] ?? [];
       $payType = $settings['type'] ?? $pm['code'];
       $icon = 'fa-credit-card';
+      $iconPrefix = 'fa-solid';
       switch ($payType) {
         case 'pix': $icon = 'fa-qrcode'; break;
         case 'zelle': $icon = 'fa-university'; break;
@@ -1396,13 +1568,14 @@ if ($route === 'checkout') {
         case 'paypal': $icon = 'fa-paypal'; break;
         case 'square': $icon = 'fa-arrow-up-right-from-square'; break;
         case 'stripe': $icon = 'fa-cc-stripe'; break;
+        case 'whatsapp': $iconPrefix = 'fa-brands'; $icon = 'fa-whatsapp'; break;
       }
       echo '  <label class="border rounded-xl p-4 cursor-pointer hover:border-brand-300 flex flex-col items-center gap-2">';
       echo '    <input type="radio" name="payment" value="'.$code.'" class="sr-only" required data-code="'.$code.'">';
       if (!empty($pm['icon_path'])) {
         echo '    <img src="'.htmlspecialchars($pm['icon_path']).'" alt="'.$label.'" class="h-10">';
       } else {
-        echo '    <i class="fa-solid '.$icon.' text-2xl text-brand-700"></i>';
+        echo '    <i class="'.$iconPrefix.' '.$icon.' text-2xl text-brand-700"></i>';
       }
       echo '    <div class="font-medium">'.$label.'</div>';
       echo '  </label>';
@@ -1415,7 +1588,7 @@ if ($route === 'checkout') {
       $payType = $settings['type'] ?? $pm['code'];
       $accountLabel = htmlspecialchars($settings['account_label'] ?? '');
       $accountValue = htmlspecialchars($settings['account_value'] ?? '');
-      $placeholders = payment_placeholders($pm, $total);
+      $placeholders = payment_placeholders($pm, $total, null, null, $subtotal, $shipping, $currencyCode);
       $instructionsHtml = render_payment_instructions($pm['instructions'] ?? '', $placeholders);
 
       if ($payType === 'square') {
@@ -1475,7 +1648,7 @@ if ($route === 'checkout') {
             echo '      </button>';
           }
         } else {
-          echo '      <div class="text-sm text-gray-600">Configure os links do Square nas opções do painel.</div>';
+          echo '      <div class="text-sm text-gray-600">Configure os links das opções de cartão (crédito, débito e Afterpay) nas configurações do painel.</div>';
         }
         echo '    </div>';
         echo '  </div>';
@@ -1486,6 +1659,46 @@ if ($route === 'checkout') {
         }
         if ($instructionsHtml !== '') {
           echo '    <p>'.$instructionsHtml.'</p>';
+        }
+        if ($payType === 'zelle') {
+          $subtotalFormatted = format_currency($subtotal, $currencyCode);
+          $shippingFormatted = format_currency($shipping, $currencyCode);
+          $totalFormatted = format_currency($total, $currencyCode);
+          $recipientName = htmlspecialchars($settings['recipient_name'] ?? '', ENT_QUOTES, 'UTF-8');
+          echo '    <div class="mt-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
+          echo '      <div class="font-semibold text-sm">Resumo da transferência</div>';
+          echo '      <div class="text-sm mt-1"><strong>Total:</strong> '.$totalFormatted.' (produtos '.$subtotalFormatted.' + frete '.$shippingFormatted.')</div>';
+          if ($recipientName !== '') {
+            echo '      <div class="text-xs mt-2 text-emerald-900/80">Beneficiário: '.$recipientName.'</div>';
+          }
+          echo '    </div>';
+        }
+        if ($payType === 'whatsapp') {
+          $waNumberRaw = trim((string)($settings['number'] ?? $settings['account_value'] ?? ''));
+          $waDisplay = $waNumberRaw !== '' ? $waNumberRaw : '';
+          $waMessage = trim((string)($settings['message'] ?? ''));
+          $waLink = trim((string)($settings['link'] ?? ''));
+          $waDigits = preg_replace('/\D+/', '', $waNumberRaw);
+          if ($waDigits !== '') {
+            $waLink = 'https://wa.me/'.$waDigits;
+            if ($waMessage !== '') {
+              $waLink .= '?text='.rawurlencode($waMessage);
+            }
+          }
+          echo '    <div class="mt-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 space-y-2">';
+          if ($waDisplay !== '') {
+            echo '      <div class="text-sm"><strong>Número:</strong> '.htmlspecialchars($waDisplay, ENT_QUOTES, 'UTF-8').'</div>';
+          }
+          if ($waMessage !== '') {
+            echo '      <div class="text-xs text-emerald-900/80">Mensagem sugerida: '.htmlspecialchars($waMessage, ENT_QUOTES, 'UTF-8').'</div>';
+          }
+          if ($waLink !== '') {
+            $safeLink = htmlspecialchars($waLink, ENT_QUOTES, 'UTF-8');
+            echo '      <div><a class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow hover:bg-emerald-700 transition" href="'.$safeLink.'" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> Abrir conversa no WhatsApp</a></div>';
+          } else {
+            echo '      <div class="text-xs text-emerald-900/80">Envie uma mensagem para nossa equipe via WhatsApp informando os dados do pedido.</div>';
+          }
+          echo '    </div>';
         }
         echo '  </div>';
       }
@@ -1509,13 +1722,13 @@ echo '      </div>';
   foreach ($items as $it) {
     echo '        <div class="flex items-center justify-between py-2 border-b">';
     echo '          <div class="text-sm"><div class="font-medium">'.htmlspecialchars($it['name']).'</div><div class="text-gray-500">Qtd: '.(int)$it['qty'].'</div></div>';
-    echo '          <div class="font-medium">$ '.number_format($it['price']*$it['qty'],2,',','.').'</div>';
+    echo '          <div class="font-medium">'.format_currency($it['price']*$it['qty'], $it['currency'] ?? $cartCurrency).'</div>';
     echo '        </div>';
   }
   echo '        <div class="mt-4 space-y-1">';
-  echo '          <div class="flex justify-between"><span>'.htmlspecialchars($d["subtotal"] ?? "Subtotal").'</span><span>$ '.number_format($subtotal,2,',','.').'</span></div>';
-  echo '          <div class="flex justify-between text-green-600"><span>Frete</span><span>$ '.number_format($shipping,2,',','.').'</span></div>';
-  echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-600">$ '.number_format($total,2,',','.').'</span></div>';
+  echo '          <div class="flex justify-between"><span>'.htmlspecialchars($d["subtotal"] ?? "Subtotal").'</span><span>'.format_currency($subtotal, $cartCurrency).'</span></div>';
+  echo '          <div class="flex justify-between text-green-600"><span>Frete</span><span>'.format_currency($shipping, $cartCurrency).'</span></div>';
+  echo '          <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Total</span><span class="text-brand-600">'.format_currency($total, $cartCurrency).'</span></div>';
   echo '        </div>';
   echo '        <button type="submit" class="w-full mt-5 px-6 py-4 rounded-xl bg-brand-600 text-white hover:bg-brand-700 font-semibold"><i class="fa-solid fa-lock mr-2"></i>'.htmlspecialchars($d["place_order"] ?? "Finalizar Pedido").'</button>';
   $securityBadges = [
@@ -1569,6 +1782,7 @@ echo '      </div>';
       const infoBlocks = document.querySelectorAll('[data-payment-info]');
       const receiptBlocks = document.querySelectorAll('[data-payment-receipt]');
       const squareOptionInput = document.getElementById('square_option_input');
+      const squareStorageKey = 'square_checkout_target';
 
       function resetSquareSelection() {
         document.querySelectorAll('.square-option-card.selected').forEach(btn => btn.classList.remove('selected'));
@@ -1620,17 +1834,34 @@ echo '      </div>';
           if (!selected) { return; }
           const code = selected.dataset.code || selected.value;
           if (code === 'square') {
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
             const features = 'noopener=yes,noreferrer=yes,width=920,height=860,left=120,top=60,resizable=yes,scrollbars=yes';
             try { window.sessionStorage.setItem('square_checkout_pending', '1'); } catch (e) {}
-            const popup = window.open('', 'squareCheckout', features);
-            if (popup) {
-              popup.document.open();
-              popup.document.write('<!DOCTYPE html><html><head><title>Pagamento Square</title><meta charset=\"utf-8\"></head><body style=\"margin:0;font-family:-apple-system,BlinkMacSystemFont,\\\"Segoe UI\\\",Roboto,\\\"Helvetica Neue\\\",sans-serif;background:#0f3d91;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;text-align:center;\"><div style=\"font-size:18px;font-weight:600;\">Carregando checkout Square...</div><p style=\"margin-top:12px;font-size:13px;max-width:260px;opacity:.85;\">Não feche esta janela. Vamos abrir o link seguro do Square automaticamente.</p><div class=\"spinner\" style=\"margin-top:20px;border:4px solid rgba(255,255,255,0.2);border-top:4px solid #fff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;\"></div><style>@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}</style></body></html>');
-              popup.document.close();
-              try { popup.focus(); } catch (e) {}
+            const loadingUrl = document.body.getAttribute('data-square-loading-url') || 'square-loading.html';
+            if (!isMobile) {
+              let popup = null;
+              try {
+                popup = window.open(loadingUrl, 'squareCheckout', features);
+              } catch (err) {
+                popup = null;
+              }
+              if (!popup) {
+                try {
+                  popup = window.open('about:blank', 'squareCheckout', features);
+                  if (popup) {
+                    popup.location.replace(loadingUrl);
+                  }
+                } catch (err) {
+                  popup = null;
+                }
+              }
+              if (popup) {
+                try { popup.focus(); } catch (e) {}
+              }
             }
           } else {
             try { window.sessionStorage.removeItem('square_checkout_pending'); } catch (e) {}
+            try { localStorage.removeItem(squareStorageKey); } catch (e) {}
           }
         });
       }
@@ -1662,6 +1893,17 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     die('Dados inválidos');
   }
 
+  $storeCurrencyBase = strtoupper($cfg['store']['currency'] ?? 'USD');
+  $cartCurrency = $_SESSION['cart_currency'] ?? null;
+  if (is_string($cartCurrency)) {
+    $cartCurrency = strtoupper(trim($cartCurrency));
+    if ($cartCurrency === '') {
+      $cartCurrency = null;
+    }
+  } else {
+    $cartCurrency = null;
+  }
+
   $ids = array_keys($cart);
   $in  = implode(',', array_fill(0, count($ids), '?'));
   $st  = $pdo->prepare("SELECT * FROM products WHERE id IN ($in) AND active=1");
@@ -1673,6 +1915,14 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ((int)$p['stock'] < $qty) die('Produto '.$p['name'].' sem estoque');
     $shipCost = isset($p['shipping_cost']) ? (float)$p['shipping_cost'] : 7.00;
     if ($shipCost < 0) { $shipCost = 0; }
+    $productCurrency = strtoupper($p['currency'] ?? $storeCurrencyBase);
+    if ($cartCurrency === null) {
+      $cartCurrency = $productCurrency;
+    } elseif ($productCurrency !== $cartCurrency) {
+      $_SESSION['checkout_error'] = 'Carrinho possui produtos com moedas diferentes. Remova itens ou finalize separadamente.';
+      header('Location: ?route=checkout');
+      exit;
+    }
     $items[] = [
       'id'=>(int)$p['id'],
       'name'=>$p['name'],
@@ -1681,13 +1931,18 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       'sku'=>$p['sku'],
       'shipping_cost'=>$shipCost,
       'square_link'=> trim((string)($p['square_payment_link'] ?? '')),
-      'stripe_link'=> trim((string)($p['stripe_payment_link'] ?? ''))
+      'stripe_link'=> trim((string)($p['stripe_payment_link'] ?? '')),
+      'currency'=>$productCurrency,
     ];
     $subtotal += (float)$p['price'] * $qty;
     $shipping += $shipCost * $qty;
   }
   $shipping = max(0, $shipping);
   $total = $subtotal + $shipping;
+  if ($cartCurrency === null) {
+    $cartCurrency = $storeCurrencyBase;
+  }
+  $_SESSION['cart_currency'] = $cartCurrency;
 
   $methods = load_payment_methods($pdo, $cfg);
   $methodMap = [];
@@ -1725,7 +1980,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       if ($squareSelectedOption !== '' && !empty($squareOptionMap[$squareSelectedOption]['link'])) {
         $squareRedirectUrl = $squareOptionMap[$squareSelectedOption]['link'];
       } else {
-        $squareWarning = 'Configuração do Square incompleta. Informe os links no painel.';
+        $squareWarning = 'Configuração do pagamento com cartão incompleta. Informe os links no painel.';
       }
     } elseif ($squareMode === 'direct_url' && !empty($methodSettings['redirect_url'])) {
       $squareRedirectUrl = $methodSettings['redirect_url'];
@@ -1742,9 +1997,9 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       }
       if (!empty($squareMissing)) {
         $cleanNames = array_map(function($name){ return sanitize_string($name ?? '', 80); }, $squareMissing);
-        $squareWarning = 'Pagamento Square pendente para: '.implode(', ', $cleanNames);
+        $squareWarning = 'Pagamento com cartão pendente para: '.implode(', ', $cleanNames);
       } elseif (count($squareLinks) > 1) {
-        $squareWarning = 'Mais de um link Square encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
+        $squareWarning = 'Mais de um link de cartão encontrado no carrinho. Ajuste os produtos para usar o mesmo link.';
       } elseif (!empty($squareLinks)) {
         $keys = array_keys($squareLinks);
         $squareRedirectUrl = $keys[0];
@@ -1842,6 +2097,26 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
   }
 
+  $whatsappLink = '';
+  $whatsappNumberDisplay = '';
+  $whatsappMessageValue = '';
+  if ($methodType === 'whatsapp') {
+    $whatsappNumberDisplay = trim((string)($methodSettings['number'] ?? $methodSettings['account_value'] ?? ''));
+    $whatsappMessageValue = trim((string)($methodSettings['message'] ?? ''));
+    $whatsappLink = trim((string)($methodSettings['link'] ?? ''));
+    $waDigits = preg_replace('/\D+/', '', $whatsappNumberDisplay);
+    if ($waDigits !== '') {
+      $whatsappLink = 'https://wa.me/'.$waDigits;
+      if ($whatsappMessageValue !== '') {
+        $whatsappLink .= '?text='.rawurlencode($whatsappMessageValue);
+      }
+    }
+    if ($whatsappLink === '' && $whatsappNumberDisplay !== '') {
+      $whatsappLink = $whatsappNumberDisplay;
+    }
+  }
+
+  $orderCurrency = $cartCurrency;
   $payRef = '';
   switch ($methodType) {
     case 'pix':
@@ -1885,12 +2160,21 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                   rawurlencode($cancelUrl);
       }
       break;
+    case 'whatsapp':
+      if ($whatsappLink !== '') {
+        $payRef = $whatsappLink;
+      } elseif ($whatsappNumberDisplay !== '') {
+        $payRef = $whatsappNumberDisplay;
+      } else {
+        $payRef = 'WHATSAPP';
+      }
+      break;
     case 'square':
       if (!empty($squareOptionMap) && $squareSelectedOption !== '' && !empty($squareOptionMap[$squareSelectedOption]['label'])) {
         $payRef = 'SQUARE:'.$squareOptionMap[$squareSelectedOption]['label'];
       } else {
         if ($squareRedirectUrl) {
-          $payRef = $squareRedirectUrl;
+        $payRef = $squareRedirectUrl;
         } elseif (!empty($methodSettings['redirect_url'])) {
           $payRef = $methodSettings['redirect_url'];
         } else {
@@ -1913,7 +2197,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($methodType === 'square') {
     if ($squareWarning || !$squareRedirectUrl) {
-      $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link Square configurado. Escolha outra forma de pagamento.';
+      $_SESSION['checkout_error'] = $squareWarning ?: 'Não encontramos um link de cartão configurado. Escolha outra forma de pagamento.';
       header('Location: ?route=checkout');
       exit;
     }
@@ -1942,12 +2226,12 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
   } catch (Throwable $e) { $hasTrack = false; }
 
   if ($hasTrack) {
-    $o = $pdo->prepare("INSERT INTO orders(customer_id, items_json, subtotal, shipping_cost, total, payment_method, payment_ref, status, zelle_receipt, track_token) VALUES(?,?,?,?,?,?,?,?,?,?)");
+    $o = $pdo->prepare("INSERT INTO orders(customer_id, items_json, subtotal, shipping_cost, total, currency, payment_method, payment_ref, status, zelle_receipt, track_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
     $track = bin2hex(random_bytes(16));
-    $o->execute([$customer_id, json_encode($items, JSON_UNESCAPED_UNICODE), $subtotal, $shipping, $total, $payment_method, $payRef, "pending", $receiptPath, $track]);
+    $o->execute([$customer_id, json_encode($items, JSON_UNESCAPED_UNICODE), $subtotal, $shipping, $total, $orderCurrency, $payment_method, $payRef, "pending", $receiptPath, $track]);
   } else {
-    $o = $pdo->prepare("INSERT INTO orders(customer_id, items_json, subtotal, shipping_cost, total, payment_method, payment_ref, status, zelle_receipt) VALUES(?,?,?,?,?,?,?,?,?)");
-    $o->execute([$customer_id, json_encode($items, JSON_UNESCAPED_UNICODE), $subtotal, $shipping, $total, $payment_method, $payRef, "pending", $receiptPath]);
+    $o = $pdo->prepare("INSERT INTO orders(customer_id, items_json, subtotal, shipping_cost, total, currency, payment_method, payment_ref, status, zelle_receipt) VALUES(?,?,?,?,?,?,?,?,?,?)");
+    $o->execute([$customer_id, json_encode($items, JSON_UNESCAPED_UNICODE), $subtotal, $shipping, $total, $orderCurrency, $payment_method, $payRef, "pending", $receiptPath]);
   }
 
     // >>> CORREÇÃO CRÍTICA: definir $order_id ANTES do commit <<<
@@ -1956,6 +2240,7 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     send_notification("new_order","Novo Pedido","Pedido #$order_id de ".sanitize_html($name),["order_id"=>$order_id,"total"=>$total,"payment_method"=>$payment_method]);
     $_SESSION["cart"] = [];
+    unset($_SESSION['cart_currency']);
     send_order_confirmation($order_id, $email);
     send_order_admin_alert($order_id);
     if ($methodType === 'square') {
@@ -1976,6 +2261,13 @@ if ($route === 'place_order' && $_SERVER['REQUEST_METHOD'] === 'POST') {
       $_SESSION['stripe_open_new_tab'] = $stripeOpenNewTab ? 1 : 0;
     } else {
       unset($_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
+    }
+    if ($methodType === 'whatsapp') {
+      $_SESSION['whatsapp_link'] = $whatsappLink;
+      $_SESSION['whatsapp_number'] = $whatsappNumberDisplay;
+      $_SESSION['whatsapp_message'] = $whatsappMessageValue;
+    } else {
+      unset($_SESSION['whatsapp_link'], $_SESSION['whatsapp_number'], $_SESSION['whatsapp_message']);
     }
 
     header("Location: ?route=order_success&id=".$order_id);
@@ -2008,7 +2300,10 @@ if ($route === 'order_success') {
   $stripeRedirectSession = $_SESSION['stripe_redirect_url'] ?? null;
   $stripeWarningSession = $_SESSION['stripe_redirect_warning'] ?? null;
   $stripeOpenNewTabSession = !empty($_SESSION['stripe_open_new_tab']);
-  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['square_option_label'], $_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab']);
+  $whatsappLinkSession = $_SESSION['whatsapp_link'] ?? null;
+  $whatsappNumberSession = $_SESSION['whatsapp_number'] ?? null;
+  $whatsappMessageSession = $_SESSION['whatsapp_message'] ?? null;
+  unset($_SESSION['square_redirect_url'], $_SESSION['square_redirect_warning'], $_SESSION['square_open_new_tab'], $_SESSION['square_option_label'], $_SESSION['stripe_redirect_url'], $_SESSION['stripe_redirect_warning'], $_SESSION['stripe_open_new_tab'], $_SESSION['whatsapp_link'], $_SESSION['whatsapp_number'], $_SESSION['whatsapp_message']);
 
   echo '<section class="max-w-3xl mx-auto px-4 py-16 text-center">';
   echo '  <div class="bg-white rounded-2xl shadow p-8">';
@@ -2023,34 +2318,118 @@ if ($route === 'order_success') {
     $squareJs = json_encode($squareRedirectSession, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
     $squareLabelNote = $squareOptionLabelSession ? ' ('.$squareOptionLabelSession.')' : '';
     echo '    <div class="mt-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
-    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Redirecionando para o pagamento Square'.$squareLabelNote.'... Caso não avance automaticamente, <a class="underline" href="'.$safeSquare.'">clique aqui</a>.';
+    echo '      <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i> Redirecionaremos você para o pagamento com cartão'.$squareLabelNote.'. Caso não abra automaticamente, <a class="underline" id="squareManualLink" href="'.$safeSquare.'" target="_blank" rel="noopener">clique aqui</a>.';
     echo '    </div>';
     echo '    <script>
       window.addEventListener("load", function(){
         const redirectKey = "square_redirect_'.$order_id.'";
-        if (!window.sessionStorage.getItem(redirectKey)) {
-          window.sessionStorage.setItem(redirectKey, "1");
-          const popFeatures = "noopener=yes,noreferrer=yes,width=920,height=860,left=120,top=60,resizable=yes,scrollbars=yes";
-          if ('.($squareOpenNewTabSession ? 'true' : 'false').') {
-            let popup = null;
-            try {
-              popup = window.open("", "squareCheckout", popFeatures);
-            } catch (err) {
-              popup = null;
+        if (window.sessionStorage.getItem(redirectKey)) {
+          return;
+        }
+        window.sessionStorage.setItem(redirectKey, "1");
+        const checkoutUrl = '.$squareJs.';
+        const isMobile = window.matchMedia("(max-width: 768px)").matches;
+        const openInNewTabConfigured = '.($squareOpenNewTabSession ? 'true' : 'false').';
+        const openInNewTab = isMobile ? false : openInNewTabConfigured;
+        const popupFeatures = "noopener=yes,noreferrer=yes,width=920,height=860,left=120,top=60,resizable=yes,scrollbars=yes";
+        const storageKey = "square_checkout_target";
+        const origin = window.location.origin || (window.location.protocol + "//" + window.location.host);
+        const loadingUrl = document.body.getAttribute("data-square-loading-url") || "square-loading.html";
+        const targetLoaderUrl = loadingUrl + (loadingUrl.includes("?") ? "&" : "?") + "target=" + encodeURIComponent(checkoutUrl);
+
+        let opened = false;
+        let storagePayload = null;
+        let placeholderWindow = null;
+
+        try {
+          storagePayload = JSON.stringify({ url: checkoutUrl, ts: Date.now() });
+          localStorage.setItem(storageKey, storagePayload);
+          setTimeout(function(){
+            try { localStorage.removeItem(storageKey); } catch (err) {}
+          }, 180000);
+        } catch (err) {
+          storagePayload = null;
+        }
+
+        if (!isMobile) {
+          try {
+            const existingPopup = window.open("", "squareCheckout", popupFeatures);
+            if (existingPopup) {
+              placeholderWindow = existingPopup;
+              if (storagePayload) {
+                try {
+                  existingPopup.postMessage({ type: "square_checkout_url", payload: storagePayload }, origin);
+                } catch (err) {}
+              }
+              try {
+                existingPopup.location.replace(checkoutUrl);
+                opened = true;
+              } catch (err) {}
+              try { existingPopup.focus(); } catch (err) {}
             }
-            if (popup) {
-              popup.location = '.$squareJs.';
-              try { popup.focus(); } catch (err) {}
-            } else {
-              window.location.href = '.$squareJs.';
+          } catch (err) {}
+        }
+
+        if (!opened) {
+          if (openInNewTab) {
+            try {
+              const popup = window.open(checkoutUrl, "squareCheckout", popupFeatures);
+              if (popup) {
+                placeholderWindow = popup;
+                try { popup.focus(); } catch (err) {}
+                opened = true;
+              }
+            } catch (err) {
+              opened = false;
             }
           } else {
-            window.location.href = '.$squareJs.';
+            if (placeholderWindow) {
+              try { placeholderWindow.close(); } catch (err) {}
+              placeholderWindow = null;
+            }
+            try {
+              window.location.assign(targetLoaderUrl);
+              opened = true;
+            } catch (err) {
+              try {
+                window.location.assign(checkoutUrl);
+                opened = true;
+              } catch (err2) {
+                opened = false;
+              }
+            }
           }
         }
+
+        // Fallback: botão manual
+        if (!opened) {
+          const manualLink = document.getElementById("squareManualLink");
+          if (manualLink) {
+            manualLink.textContent = "Abrir checkout do cartão";
+            manualLink.classList.add("font-semibold");
+          }
+        }
+
         try { window.sessionStorage.removeItem("square_checkout_pending"); } catch (err) {}
       });
     </script>';
+  }
+  if (!empty($whatsappLinkSession) || !empty($whatsappNumberSession) || !empty($whatsappMessageSession)) {
+    $safeWaLink = $whatsappLinkSession ? htmlspecialchars($whatsappLinkSession, ENT_QUOTES, 'UTF-8') : '';
+    $safeWaNumber = $whatsappNumberSession ? htmlspecialchars($whatsappNumberSession, ENT_QUOTES, 'UTF-8') : '';
+    $safeWaMessage = $whatsappMessageSession ? htmlspecialchars($whatsappMessageSession, ENT_QUOTES, 'UTF-8') : '';
+    echo '    <div class="mt-4 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">';
+    echo '      <div class="font-semibold text-sm mb-1"><i class="fa-brands fa-whatsapp mr-2"></i>Finalize pelo WhatsApp</div>';
+    if ($safeWaNumber !== '') {
+      echo '      <div class="text-sm">Número: '.$safeWaNumber.'</div>';
+    }
+    if ($safeWaMessage !== '') {
+      echo '      <div class="text-xs text-emerald-900/80 mt-1">Mensagem sugerida: '.$safeWaMessage.'</div>';
+    }
+    if ($safeWaLink !== '') {
+      echo '      <div class="mt-2"><a class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow hover:bg-emerald-700 transition" href="'.$safeWaLink.'" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> Abrir conversa</a></div>';
+    }
+    echo '    </div>';
   }
   if (!empty($stripeWarningSession)) {
     echo '    <div class="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>'.htmlspecialchars($stripeWarningSession, ENT_QUOTES, "UTF-8").'</div>';

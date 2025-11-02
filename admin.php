@@ -36,10 +36,10 @@ $allowed = ['login','logout','dashboard','settings','api_ping'];
 if (!in_array($route, $allowed, true)) $route = is_admin() ? 'dashboard' : 'login';
 
 /* ===== Layout ===== */
-function admin_header($title='Admin - Get Power', $withLayout=true){
+function admin_header($title='Admin - Get Power Research', $withLayout=true){
   $logo = find_logo_path();
   $cfg  = function_exists('cfg') ? cfg() : [];
-  $storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power');
+  $storeName = setting_get('store_name', $cfg['store']['name'] ?? 'Get Power Research');
   $currentScript = basename($_SERVER['SCRIPT_NAME']);
   $route = $_GET['route'] ?? '';
 
@@ -298,7 +298,10 @@ try{
     echo '    <label class="block text-sm mb-1">Senha</label>';
     echo '    <input class="w-full border rounded px-3 py-2 mb-4" type="password" name="password" required>';
     echo '    <button class="btn btn-primary w-full" type="submit"><i class="fa-solid fa-right-to-bracket mr-2"></i>Entrar</button>';
-    echo '    <div class="mt-3 text-center"><a class="btn btn-ghost" href="index.php" target="_blank"><i class="fa-solid fa-store mr-1"></i>Ver loja</a></div>';
+    echo '    <div class="mt-3 flex items-center justify-between text-sm">';
+    echo '      <a class="text-brand-600 hover:underline" href="forgot_password.php"><i class="fa-solid fa-key mr-1"></i>Esqueci minha senha</a>';
+    echo '      <a class="btn btn-ghost" href="index.php" target="_blank"><i class="fa-solid fa-store mr-1"></i>Ver loja</a>';
+    echo '    </div>';
     echo '  </form>';
     echo '</div>';
 

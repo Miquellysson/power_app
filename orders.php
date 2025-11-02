@@ -52,27 +52,30 @@ if ($action==='view') {
   $o=$st->fetch();
   if (!$o){ header('Location: orders.php'); exit; }
   $items = json_decode($o['items_json'] ?? '[]', true) ?: [];
+  $orderCurrency = strtoupper($o['currency'] ?? (cfg()['store']['currency'] ?? 'USD'));
   admin_header('Pedido #'.$id);
 
   echo '<div class="grid md:grid-cols-3 gap-3">';
   echo '<div class="card md:col-span-2"><div class="card-title">Itens do pedido</div><div class="p-3 overflow-x-auto">';
   echo '<table class="table"><thead><tr><th>SKU</th><th>Produto</th><th>Qtd</th><th>Preço</th><th>Total</th></tr></thead><tbody>';
   foreach($items as $it){
-    $line = (float)$it['price'] * (int)$it['qty'];
+    $itemCurrency = $it['currency'] ?? $orderCurrency;
+    $priceValue = (float)($it['price'] ?? 0);
+    $line = $priceValue * (int)$it['qty'];
     echo '<tr>';
     echo '<td>'.sanitize_html($it['sku'] ?? '').'</td>';
     echo '<td>'.sanitize_html($it['name']).'</td>';
     echo '<td>'.(int)$it['qty'].'</td>';
-    echo '<td>$ '.number_format((float)$it['price'],2,',','.').'</td>';
-    echo '<td>$ '.number_format($line,2,',','.').'</td>';
+    echo '<td>'.format_currency($priceValue, $itemCurrency).'</td>';
+    echo '<td>'.format_currency($line, $itemCurrency).'</td>';
     echo '</tr>';
   }
   echo '</tbody></table></div></div>';
 
   echo '<div class="card"><div class="card-title">Resumo</div><div class="p-3">';
-  echo '<div class="mb-2">Subtotal: <strong>$ '.number_format((float)$o['subtotal'],2,',','.').'</strong></div>';
-  echo '<div class="mb-2">Frete: <strong>$ '.number_format((float)$o['shipping_cost'],2,',','.').'</strong></div>';
-  echo '<div class="mb-2">Total: <strong>$ '.number_format((float)$o['total'],2,',','.').'</strong></div>';
+  echo '<div class="mb-2">Subtotal: <strong>'.format_currency((float)$o['subtotal'], $orderCurrency).'</strong></div>';
+  echo '<div class="mb-2">Frete: <strong>'.format_currency((float)$o['shipping_cost'], $orderCurrency).'</strong></div>';
+  echo '<div class="mb-2">Total: <strong>'.format_currency((float)$o['total'], $orderCurrency).'</strong></div>';
   echo '<div class="mb-2">Pagamento: <strong>'.sanitize_html($o['payment_method']).'</strong></div>';
   if (!empty($o['payment_ref'])) echo '<div class="mb-2">Ref: <a class="text-blue-600 underline" href="'.sanitize_html($o['payment_ref']).'" target="_blank">abrir</a></div>';
   echo '<div class="mb-2">Status: '.status_badge($o['status']).'</div>';
@@ -116,7 +119,7 @@ if ($q!==''){
   $w .= " AND (c.name LIKE ? OR o.id = ? ) ";
   $p = ["%$q%", (int)$q];
 }
-$sql="SELECT o.id,o.total,o.status,o.created_at,c.name AS customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id $w ORDER BY o.id DESC LIMIT 200";
+$sql="SELECT o.id,o.total,o.currency,o.status,o.created_at,c.name AS customer_name FROM orders o LEFT JOIN customers c ON c.id=o.customer_id $w ORDER BY o.id DESC LIMIT 200";
 $st=$pdo->prepare($sql); $st->execute($p);
 
 echo '<div class="card">';
@@ -127,7 +130,8 @@ foreach($st as $r){
   echo '<tr>';
   echo '<td>#'.(int)$r['id'].'</td>';
   echo '<td>'.sanitize_html($r['customer_name']).'</td>';
-  echo '<td>$ '.number_format((float)$r['total'],2,',','.').'</td>';
+  $rowCurrency = strtoupper($r['currency'] ?? (cfg()['store']['currency'] ?? 'USD'));
+  echo '<td>'.format_currency((float)$r['total'], $rowCurrency).'</td>';
   echo '<td>'.status_badge($r['status']).'</td>';
   echo '<td>'.sanitize_html($r['created_at'] ?? '').'</td>';
   echo '<td><a class="btn" href="orders.php?action=view&id='.(int)$r['id'].'"><i class="fa-solid fa-eye"></i> Ver</a></td>';

@@ -38,6 +38,7 @@ $pdo = db();
 require_admin();
 
 ensure_products_schema($pdo);
+$storeCurrency = strtoupper(cfg()['store']['currency'] ?? 'USD');
 
 $action = $_GET['action'] ?? 'list';
 $canManageProducts = admin_can('manage_products');
@@ -69,19 +70,28 @@ function ensure_products_schema(PDO $pdo): void {
   try {
     $cols = $pdo->query("SHOW COLUMNS FROM products");
     $hasPriceCompare = false;
+    $hasCurrency = false;
     if ($cols) {
       while ($col = $cols->fetch(PDO::FETCH_ASSOC)) {
-        if (isset($col['Field']) && $col['Field'] === 'price_compare') {
+        if (($col['Field'] ?? '') === 'price_compare') {
           $hasPriceCompare = true;
-          break;
+        }
+        if (($col['Field'] ?? '') === 'currency') {
+          $hasCurrency = true;
         }
       }
     }
     if (!$hasPriceCompare) {
       $pdo->exec("ALTER TABLE products ADD COLUMN price_compare DECIMAL(10,2) NULL AFTER price");
     }
+    if (!$hasCurrency) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'USD' AFTER price_compare");
+      $defaultCurrency = strtoupper(cfg()['store']['currency'] ?? 'USD');
+      $upd = $pdo->prepare("UPDATE products SET currency = ? WHERE currency IS NULL OR currency = ''");
+      $upd->execute([$defaultCurrency]);
+    }
   } catch (Throwable $e) {
-    // Ignora: se a coluna já existir ou permissão negada, apenas seguimos sem interromper
+    // Ignora: se as colunas já existirem ou permissão negada, apenas seguimos sem interromper
   }
 }
 
@@ -192,8 +202,19 @@ function parse_decimal_value($raw, ?float $default = null): ?float {
   return (float)$value;
 }
 
+function normalize_product_currency($value, $fallback): string {
+  $fallback = strtoupper($fallback ?: 'USD');
+  $value = strtoupper(trim((string)$value));
+  $allowed = ['USD', 'BRL'];
+  if ($value === '' || !in_array($value, $allowed, true)) {
+    return $fallback;
+  }
+  return $value;
+}
+
 /** Formulário de produto (reutilizável) */
 function product_form($row){
+  global $storeCurrency;
   $id = (int)($row['id'] ?? 0);
   $name = sanitize_html($row['name'] ?? '');
   $sku = sanitize_html($row['sku'] ?? '');
@@ -210,9 +231,13 @@ function product_form($row){
   $desc = sanitize_html($row['description'] ?? '');
   $active = (int)($row['active'] ?? 1);
   $featured = (int)($row['featured'] ?? 0);
+  $currency = normalize_product_currency($row['currency'] ?? '', $storeCurrency);
   $img = sanitize_html($row['image_path'] ?? '');
   $square_link = sanitize_html($row['square_payment_link'] ?? '');
   $stripe_link = sanitize_html($row['stripe_payment_link'] ?? '');
+  $square_credit = sanitize_html($row['square_credit_link'] ?? '');
+  $square_debit = sanitize_html($row['square_debit_link'] ?? '');
+  $square_afterpay = sanitize_html($row['square_afterpay_link'] ?? '');
   $csrf = csrf_token();
 
   echo '<form class="p-4 space-y-3" method="post" enctype="multipart/form-data" action="products.php?action='.($id?'update&id='.$id:'create').'">';
@@ -223,17 +248,49 @@ function product_form($row){
   echo '    <div class="field"><span>Preço original (De)</span><input class="input" name="price_compare" type="number" step="0.01" value="'.$priceCompare.'" placeholder="Ex.: 59.90">';
   echo '      <p class="text-xs text-gray-500 mt-1">Deixe vazio para ocultar a faixa “de”.</p></div>';
   echo '    <div class="field"><span>Preço atual (Por)</span><input class="input" name="price" type="number" step="0.01" value="'.$price.'" required>';
-  echo '      <p class="text-xs text-gray-500 mt-1">Valor final cobrado do cliente.</p></div>';
-  echo '    <div class="field"><span>Frete (US$)</span><input class="input" name="shipping_cost" type="number" step="0.01" value="'.$shippingCost.'" placeholder="7.00"></div>';
+  echo '      <p class="text-xs text-gray-500 mt-1">Informe o valor na moeda selecionada abaixo.</p></div>';
+  $currencyOptions = [
+    'USD' => 'USD (US$)',
+    'BRL' => 'BRL (R$)'
+  ];
+  $currencySelect = '<select class="select" name="currency">';
+  foreach ($currencyOptions as $code => $label) {
+    $sel = ($currency === $code) ? 'selected' : '';
+    $currencySelect .= '<option value="'.$code.'" '.$sel.'>'.$label.'</option>';
+  }
+  $currencySelect .= '</select>';
+  echo '    <div class="field"><span>Moeda</span>'.$currencySelect.'</div>';
+  echo '    <div class="field"><span>Frete ('.$currency.')</span><input class="input" name="shipping_cost" type="number" step="0.01" value="'.$shippingCost.'" placeholder="7.00"></div>';
   echo '    <div class="field"><span>Estoque</span><input class="input" name="stock" type="number" value="'.$stock.'" required></div>';
   echo '    <div class="field"><span>Categoria</span><select class="select" name="category_id">'.categories_options($GLOBALS["pdo"], $category_id).'</select></div>';
   echo '    <div class="field"><span>Ativo</span><select class="select" name="active"><option value="1" '.($active? 'selected':'').'>Sim</option><option value="0" '.(!$active? 'selected':'').'>Não</option></select></div>';
   echo '    <div class="field"><span>Destaque</span><select class="select" name="featured"><option value="0" '.(!$featured? 'selected':'').'>Não</option><option value="1" '.($featured? 'selected':'').'>Sim</option></select></div>';
-  echo '    <div class="field md:col-span-2"><span>Link de Pagamento Square</span>';
+  echo '    <div class="field md:col-span-2"><span>Link do checkout do cartão (Square)</span>';
   echo '      <input class="input" type="url" name="square_payment_link" value="'.$square_link.'" placeholder="https://square.link/u/xxxx">';
-  echo '      <p class="text-xs text-gray-500 mt-1">Cole aqui o link gerado no Square (aceita square.link, checkout.square.site ou squareup.com).</p>';
+  echo '      <p class="text-xs text-gray-500 mt-1">Cole aqui o link gerado no Square para o checkout de cartão (aceita square.link, checkout.square.site ou squareup.com).</p>';
   if ($square_link) {
     echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_link.'" target="_blank" rel="noopener">Testar link</a></p>';
+  }
+  echo '    </div>';
+  echo '    <div class="field md:col-span-2"><span>Cartão de crédito (Square) por produto</span>';
+  echo '      <input class="input" type="url" name="square_credit_link" value="'.$square_credit.'" placeholder="https://square.link/.../credit">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Link específico deste produto para cartão de crédito. Caso vazio, usamos o link padrão acima ou configurações do método.</p>';
+  if ($square_credit) {
+    echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_credit.'" target="_blank" rel="noopener">Testar</a></p>';
+  }
+  echo '    </div>';
+  echo '    <div class="field md:col-span-2"><span>Cartão de débito (Square) por produto</span>';
+  echo '      <input class="input" type="url" name="square_debit_link" value="'.$square_debit.'" placeholder="https://square.link/.../debit">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Link específico deste produto para cartão de débito.</p>';
+  if ($square_debit) {
+    echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_debit.'" target="_blank" rel="noopener">Testar</a></p>';
+  }
+  echo '    </div>';
+  echo '    <div class="field md:col-span-2"><span>Afterpay (Square) por produto</span>';
+  echo '      <input class="input" type="url" name="square_afterpay_link" value="'.$square_afterpay.'" placeholder="https://square.link/.../afterpay">';
+  echo '      <p class="text-xs text-gray-500 mt-1">Link específico deste produto para Afterpay.</p>';
+  if ($square_afterpay) {
+    echo '      <p class="text-xs mt-1"><a class="text-brand-600 underline" href="'.$square_afterpay.'" target="_blank" rel="noopener">Testar</a></p>';
   }
   echo '    </div>';
   echo '    <div class="field md:col-span-2"><span>Link de Pagamento Stripe</span>';
@@ -257,8 +314,8 @@ if ($action==='export') {
   header('Content-Type: text/csv; charset=utf-8');
   header('Content-Disposition: attachment; filename="produtos-'.date('Ymd-His').'.csv"');
   $out = fopen('php://output', 'w');
-  fputcsv($out, ['sku','name','price','price_compare','shipping_cost','stock','category_id','description','image_path','square_payment_link','stripe_payment_link','active']);
-  $stmt = $pdo->query("SELECT sku,name,price,price_compare,shipping_cost,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active FROM products ORDER BY id ASC");
+  fputcsv($out, ['sku','name','price','price_compare','shipping_cost','currency','stock','category_id','description','image_path','square_credit_link','square_debit_link','square_afterpay_link','square_payment_link','stripe_payment_link','active']);
+  $stmt = $pdo->query("SELECT sku,name,price,price_compare,shipping_cost,currency,stock,category_id,description,image_path,square_credit_link,square_debit_link,square_afterpay_link,square_payment_link,stripe_payment_link,active FROM products ORDER BY id ASC");
   foreach ($stmt as $row) {
     fputcsv($out, [
       $row['sku'],
@@ -266,10 +323,14 @@ if ($action==='export') {
       number_format((float)$row['price'], 2, '.', ''),
       $row['price_compare'] !== null ? number_format((float)$row['price_compare'], 2, '.', '') : '',
       number_format((float)($row['shipping_cost'] ?? 7), 2, '.', ''),
+      strtoupper($row['currency'] ?? $storeCurrency),
       (int)$row['stock'],
       $row['category_id'],
       $row['description'],
       $row['image_path'],
+      $row['square_credit_link'],
+      $row['square_debit_link'],
+      $row['square_afterpay_link'],
       $row['square_payment_link'],
       $row['stripe_payment_link'],
       (int)$row['active']
@@ -320,8 +381,8 @@ if ($action==='import') {
     $errors = [];
     $line = 1;
     $selectSku = $pdo->prepare("SELECT * FROM products WHERE sku = ? LIMIT 1");
-    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, price_compare=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_payment_link=?, stripe_payment_link=? WHERE id=?");
-    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,price_compare,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+    $updateStmt = $pdo->prepare("UPDATE products SET name=?, sku=?, price=?, price_compare=?, currency=?, shipping_cost=?, stock=?, category_id=?, description=?, active=?, featured=?, image_path=?, square_credit_link=?, square_debit_link=?, square_afterpay_link=?, square_payment_link=?, stripe_payment_link=? WHERE id=?");
+    $insertStmt = $pdo->prepare("INSERT INTO products(name,sku,price,price_compare,currency,shipping_cost,stock,category_id,description,active,featured,image_path,square_credit_link,square_debit_link,square_afterpay_link,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
     $categoryIds = [];
     try {
       $categoryIds = $pdo->query("SELECT id FROM categories")->fetchAll(PDO::FETCH_COLUMN);
@@ -380,8 +441,30 @@ if ($action==='import') {
             $categoryId = null;
           }
         }
+        $currencyInput = $data['currency'] ?? '';
         $description = $data['description'] ?? '';
         $imagePath = $data['image_path'] ?? null;
+        $squareCreditInput = $data['square_credit_link'] ?? '';
+        [$squareCreditOk, $squareCreditLink, $squareCreditError] = normalize_square_link($squareCreditInput);
+        if (!$squareCreditOk) {
+          $errors[] = "Linha {$line}: {$squareCreditError}";
+          $skipped++;
+          continue;
+        }
+        $squareDebitInput = $data['square_debit_link'] ?? '';
+        [$squareDebitOk, $squareDebitLink, $squareDebitError] = normalize_square_link($squareDebitInput);
+        if (!$squareDebitOk) {
+          $errors[] = "Linha {$line}: {$squareDebitError}";
+          $skipped++;
+          continue;
+        }
+        $squareAfterpayInput = $data['square_afterpay_link'] ?? '';
+        [$squareAfterpayOk, $squareAfterpayLink, $squareAfterpayError] = normalize_square_link($squareAfterpayInput);
+        if (!$squareAfterpayOk) {
+          $errors[] = "Linha {$line}: {$squareAfterpayError}";
+          $skipped++;
+          continue;
+        }
         $squareInput = $data['square_payment_link'] ?? '';
         [$squareOk, $squareLink, $squareError] = normalize_square_link($squareInput);
         if (!$squareOk) {
@@ -408,14 +491,19 @@ if ($action==='import') {
           if ($categoryToUse !== null && !in_array((int)$categoryToUse, $categoryIds, true)) {
             $categoryToUse = null;
           }
+          $squareCreditToUse = $squareCreditLink !== '' ? $squareCreditLink : ($existing['square_credit_link'] ?? '');
+          $squareDebitToUse = $squareDebitLink !== '' ? $squareDebitLink : ($existing['square_debit_link'] ?? '');
+          $squareAfterpayToUse = $squareAfterpayLink !== '' ? $squareAfterpayLink : ($existing['square_afterpay_link'] ?? '');
           $squareToUse = $squareLink !== '' ? $squareLink : ($existing['square_payment_link'] ?? '');
           $stripeToUse = $stripeLink !== '' ? $stripeLink : ($existing['stripe_payment_link'] ?? '');
           $compareToUse = $hasPriceCompare ? $priceCompare : ($existing['price_compare'] ?? null);
+          $currencyToUse = normalize_product_currency($currencyInput, $existing['currency'] ?? $storeCurrency);
           $updateStmt->execute([
             $name,
             $sku,
             $price,
             $compareToUse,
+            $currencyToUse,
             $shippingCost,
             $stock,
             $categoryToUse,
@@ -423,17 +511,22 @@ if ($action==='import') {
             $active,
             $featured,
             $imgToUse,
+            $squareCreditToUse,
+            $squareDebitToUse,
+            $squareAfterpayToUse,
             $squareToUse,
             $stripeToUse,
             $existing['id']
           ]);
           $updated++;
         } else {
+          $currencyFinal = normalize_product_currency($currencyInput, $storeCurrency);
           $insertStmt->execute([
             $name,
             $sku,
             $price,
             $priceCompare,
+            $currencyFinal,
             $shippingCost,
             $stock,
             $categoryId,
@@ -441,6 +534,9 @@ if ($action==='import') {
             $active,
             0,
             $imagePath ?: null,
+            $squareCreditLink,
+            $squareDebitLink,
+            $squareAfterpayLink,
             $squareLink,
             $stripeLink
           ]);
@@ -476,7 +572,7 @@ if ($action==='import') {
     $icon = $flash['type'] === 'error' ? 'fa-circle-exclamation' : ($flash['type'] === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-check');
     echo '<div class="'.$class.'"><i class="fa-solid '.$icon.' mr-2"></i>'.sanitize_html($flash['message']).'</div>';
   }
-  echo '<p class="text-sm text-gray-600">Envie um arquivo CSV (UTF-8) com o cabeçalho <code>sku,name,price,price_compare,stock,category_id,description,image_path,square_payment_link,stripe_payment_link,active</code>. SKU existente é atualizado; demais são criados.</p>';
+  echo '<p class="text-sm text-gray-600">Envie um arquivo CSV (UTF-8) com o cabeçalho <code>sku,name,price,price_compare,shipping_cost,currency,stock,category_id,description,image_path,square_credit_link,square_debit_link,square_afterpay_link,square_payment_link,stripe_payment_link,active</code> (os campos <code>price_compare</code>, <code>shipping_cost</code> e <code>currency</code> são opcionais).</p>';
   echo '<p class="text-sm text-gray-600">Use <a class="text-brand-600 underline" href="products.php?action=export">Exportar CSV</a> para gerar um modelo.</p>';
   echo '<form method="post" enctype="multipart/form-data" class="space-y-3">';
   echo '  <input type="hidden" name="csrf" value="'.csrf_token().'">';
@@ -493,7 +589,7 @@ if ($action==='import') {
 if ($action==='new') {
   admin_header('Novo produto');
   echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
-  product_form([]);
+  product_form(['currency' => $storeCurrency]);
   echo '</div>';
   admin_footer(); exit;
 }
@@ -511,6 +607,7 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   }
   $shipping_cost = isset($_POST['shipping_cost']) ? (float)$_POST['shipping_cost'] : 7.0;
   if ($shipping_cost < 0) $shipping_cost = 0;
+  $currency = normalize_product_currency($_POST['currency'] ?? $storeCurrency, $storeCurrency);
   $stock= (int)($_POST['stock'] ?? 0);
   $category_id = (int)($_POST['category_id'] ?? 0);
   if ($category_id <= 0) {
@@ -522,33 +619,35 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
   $image_path = null;
   $square_input = (string)($_POST['square_payment_link'] ?? '');
   [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
+  $square_credit_input = (string)($_POST['square_credit_link'] ?? '');
+  [$credit_ok, $square_credit_link, $credit_error] = normalize_square_link($square_credit_input);
+  $square_debit_input = (string)($_POST['square_debit_link'] ?? '');
+  [$debit_ok, $square_debit_link, $debit_error] = normalize_square_link($square_debit_input);
+  $square_afterpay_input = (string)($_POST['square_afterpay_link'] ?? '');
+  [$afterpay_ok, $square_afterpay_link, $afterpay_error] = normalize_square_link($square_afterpay_input);
   $stripe_input = (string)($_POST['stripe_payment_link'] ?? '');
   [$stripe_ok, $stripe_link, $stripe_error] = normalize_stripe_link($stripe_input);
-  if (!$square_ok) {
+  $linkErrors = [];
+  if (!$square_ok && $square_error) $linkErrors[] = $square_error;
+  if (!$credit_ok && $credit_error) $linkErrors[] = $credit_error;
+  if (!$debit_ok && $debit_error) $linkErrors[] = $debit_error;
+  if (!$afterpay_ok && $afterpay_error) $linkErrors[] = $afterpay_error;
+  if (!$stripe_ok && $stripe_error) $linkErrors[] = $stripe_error;
+  if ($linkErrors) {
+    $alert = sanitize_html($linkErrors[0]);
     admin_header('Novo produto');
     echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
-    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($square_error).'</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.$alert.'</div>';
     product_form([
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
+      'currency'=>$currency,
       'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
-      'stripe_payment_link'=>$stripe_input
-    ]);
-    echo '</div>';
-    admin_footer(); exit;
-  }
-  if (!$stripe_ok) {
-    admin_header('Novo produto');
-    echo '<div class="card"><div class="card-title">Cadastrar produto</div>';
-    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($stripe_error).'</div>';
-    product_form([
-      'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
-      'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
-      'shipping_cost'=>$shipping_cost,
-      'price_compare'=>$price_compare_input,
-      'square_payment_link'=>$square_input,
+      'square_credit_link'=>$square_credit_input,
+      'square_debit_link'=>$square_debit_input,
+      'square_afterpay_link'=>$square_afterpay_input,
       'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
@@ -565,8 +664,12 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
       'name'=>$name,'sku'=>$sku,'price'=>$price,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>null,
       'shipping_cost'=>$shipping_cost,
+      'currency'=>$currency,
       'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
+      'square_credit_link'=>$square_credit_input,
+      'square_debit_link'=>$square_debit_input,
+      'square_afterpay_link'=>$square_afterpay_input,
       'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
@@ -583,9 +686,9 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("INSERT INTO products(name,sku,price,price_compare,shipping_cost,stock,category_id,description,active,featured,image_path,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+  $st=$pdo->prepare("INSERT INTO products(name,sku,price,price_compare,currency,shipping_cost,stock,category_id,description,active,featured,image_path,square_credit_link,square_debit_link,square_afterpay_link,square_payment_link,stripe_payment_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
   try {
-    $st->execute([$name,$sku,$price,$price_compare,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link]);
+    $st->execute([$name,$sku,$price,$price_compare,$currency,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_credit_link,$square_debit_link,$square_afterpay_link,$square_link,$stripe_link]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     // Proteção extra caso outro processo crie o mesmo SKU no intervalo
@@ -598,15 +701,19 @@ if ($action==='create' && $_SERVER['REQUEST_METHOD']==='POST') {
         'sku'=>$sku,
         'price'=>$price,
         'shipping_cost'=>$shipping_cost,
+        'currency'=>$currency,
         'stock'=>$stock,
         'category_id'=>$category_id,
         'description'=>$description,
         'active'=>$active,
-        'featured'=>$featured,
-        'image_path'=>null,
-        'square_payment_link'=>$square_input,
-        'stripe_payment_link'=>$stripe_input
-      ]);
+      'featured'=>$featured,
+      'image_path'=>null,
+      'square_payment_link'=>$square_input,
+      'square_credit_link'=>$square_credit_input,
+      'square_debit_link'=>$square_debit_input,
+      'square_afterpay_link'=>$square_afterpay_input,
+      'stripe_payment_link'=>$stripe_input
+    ]);
       echo '</div>';
       admin_footer(); exit;
     }
@@ -656,19 +763,34 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
   $image_path = $currentImage;
   $square_input = (string)($_POST['square_payment_link'] ?? '');
   [$square_ok, $square_link, $square_error] = normalize_square_link($square_input);
+  $square_credit_input = (string)($_POST['square_credit_link'] ?? '');
+  [$credit_ok, $square_credit_link, $credit_error] = normalize_square_link($square_credit_input);
+  $square_debit_input = (string)($_POST['square_debit_link'] ?? '');
+  [$debit_ok, $square_debit_link, $debit_error] = normalize_square_link($square_debit_input);
+  $square_afterpay_input = (string)($_POST['square_afterpay_link'] ?? '');
+  [$afterpay_ok, $square_afterpay_link, $afterpay_error] = normalize_square_link($square_afterpay_input);
   $stripe_input = (string)($_POST['stripe_payment_link'] ?? '');
   [$stripe_ok, $stripe_link, $stripe_error] = normalize_stripe_link($stripe_input);
+  $currency = normalize_product_currency($_POST['currency'] ?? $storeCurrency, $storeCurrency);
 
-  if (!$square_ok || !$stripe_ok) {
-    $alert = !$square_ok ? $square_error : $stripe_error;
+  $linkErrors = [];
+  if (!$square_ok && $square_error) $linkErrors[] = $square_error;
+  if (!$credit_ok && $credit_error) $linkErrors[] = $credit_error;
+  if (!$debit_ok && $debit_error) $linkErrors[] = $debit_error;
+  if (!$afterpay_ok && $afterpay_error) $linkErrors[] = $afterpay_error;
+  if (!$stripe_ok && $stripe_error) $linkErrors[] = $stripe_error;
+  if ($linkErrors) {
     admin_header('Editar produto');
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
-    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($alert).'</div>';
+    echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> '.sanitize_html($linkErrors[0]).'</div>';
     product_form([
-      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
+      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'currency'=>$currency,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
       'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
+      'square_credit_link'=>$square_credit_input,
+      'square_debit_link'=>$square_debit_input,
+      'square_afterpay_link'=>$square_afterpay_input,
       'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
@@ -680,10 +802,13 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
     echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i> SKU já utilizado por outro produto: <b>'.sanitize_html($sku).'</b>.</div>';
     product_form([
-      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
+      'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'currency'=>$currency,'stock'=>$stock,'category_id'=>$category_id,
       'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
       'price_compare'=>$price_compare_input,
       'square_payment_link'=>$square_input,
+      'square_credit_link'=>$square_credit_input,
+      'square_debit_link'=>$square_debit_input,
+      'square_afterpay_link'=>$square_afterpay_input,
       'stripe_payment_link'=>$stripe_input
     ]);
     echo '</div>';
@@ -700,9 +825,9 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
     }
   }
 
-  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,price_compare=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_payment_link=?,stripe_payment_link=? WHERE id=?");
+  $st=$pdo->prepare("UPDATE products SET name=?,sku=?,price=?,price_compare=?,currency=?,shipping_cost=?,stock=?,category_id=?,description=?,active=?,featured=?,image_path=?,square_credit_link=?,square_debit_link=?,square_afterpay_link=?,square_payment_link=?,stripe_payment_link=? WHERE id=?");
   try {
-    $st->execute([$name,$sku,$price,$price_compare,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_link,$stripe_link,$id]);
+    $st->execute([$name,$sku,$price,$price_compare,$currency,$shipping_cost,$stock,$category_id,$description,$active,$featured,$image_path,$square_credit_link,$square_debit_link,$square_afterpay_link,$square_link,$stripe_link,$id]);
     header('Location: products.php'); exit;
   } catch (PDOException $e) {
     if (!empty($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062) {
@@ -710,7 +835,7 @@ if ($action==='update' && $_SERVER['REQUEST_METHOD']==='POST') {
       echo '<div class="card"><div class="card-title">Editar produto #'.(int)$id.'</div>';
       echo '<div class="p-4 mb-2 rounded border border-red-200 bg-red-50 text-red-700"><i class="fa-solid fa-circle-exclamation mr-1"></i> SKU duplicado no banco. Tente outro valor.</div>';
       product_form([
-        'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'stock'=>$stock,'category_id'=>$category_id,
+        'id'=>$id,'name'=>$name,'sku'=>$sku,'price'=>$price,'shipping_cost'=>$shipping_cost,'currency'=>$currency,'stock'=>$stock,'category_id'=>$category_id,
         'description'=>$description,'active'=>$active,'featured'=>$featured,'image_path'=>$image_path,
         'price_compare'=>$price_compare_input,
         'square_payment_link'=>$square_input,
@@ -804,7 +929,7 @@ if ($isSuperAdmin) {
 } else {
   echo '<th></th>';
 }
-echo '<th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Frete</th><th>Estoque</th><th>Square</th><th>Ativo</th><th></th></tr></thead><tbody>';
+echo '<th>#</th><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Frete</th><th>Moeda</th><th>Estoque</th><th>Cartão (Square)</th><th>Ativo</th><th></th></tr></thead><tbody>';
 foreach($st as $r){
   echo '<tr>';
   echo '<td>';
@@ -817,15 +942,17 @@ foreach($st as $r){
   echo '<td>'.sanitize_html($r['name']).'</td>';
   echo '<td>'.sanitize_html($r['category_name']).'</td>';
   $priceNow = (float)$r['price'];
+  $productCurrency = normalize_product_currency($r['currency'] ?? '', $storeCurrency);
   $priceCompareList = isset($r['price_compare']) ? (float)$r['price_compare'] : null;
+  $priceFormatted = format_currency($priceNow, $productCurrency);
   if ($priceCompareList && $priceCompareList > $priceNow) {
-    $compareFormatted = '$ '.number_format($priceCompareList,2,',','.');
-    $priceFormatted = '$ '.number_format($priceNow,2,',','.');
+    $compareFormatted = format_currency($priceCompareList, $productCurrency);
     echo '<td><div class="flex flex-col leading-tight"><span class="text-[11px] line-through text-gray-400">'.$compareFormatted.'</span><span class="font-semibold text-brand-700">'.$priceFormatted.'</span></div></td>';
   } else {
-    echo '<td>$ '.number_format($priceNow,2,',','.').'</td>';
+    echo '<td>'.$priceFormatted.'</td>';
   }
-  echo '<td>$ '.number_format((float)($r['shipping_cost'] ?? 7),2,',','.').'</td>';
+  echo '<td>'.format_currency((float)($r['shipping_cost'] ?? 7), $productCurrency).'</td>';
+  echo '<td>'.$productCurrency.'</td>';
   echo '<td>'.(int)$r['stock'].'</td>';
   $squareCol = trim((string)($r['square_payment_link'] ?? ''));
   if ($squareCol !== '') {

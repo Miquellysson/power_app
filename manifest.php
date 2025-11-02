@@ -8,21 +8,20 @@ header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=600');
 
 $cfg = cfg();
-$name = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power');
+$name = setting_get('pwa_name', $cfg['store']['name'] ?? 'Get Power Research');
 $short = setting_get('pwa_short_name', $name);
 $themeColor = setting_get('theme_color', '#2060C8');
 $backgroundColor = setting_get('pwa_background_color', $themeColor);
 $description = setting_get('store_meta_title', $name.' | Loja');
 
-$iconsInfo = get_pwa_icon_paths();
 $icons = [];
 foreach ([192, 512] as $size) {
-    if (!isset($iconsInfo[$size])) {
+    $path = get_pwa_icon_path($size);
+    if ($path === '') {
         continue;
     }
-    $rel = '/' . ltrim($iconsInfo[$size]['relative'], '/');
     $icons[] = [
-        'src' => $rel,
+        'src' => pwa_icon_url($size),
         'sizes' => $size . 'x' . $size,
         'type' => 'image/png',
         'purpose' => 'any maskable'
@@ -31,13 +30,13 @@ foreach ([192, 512] as $size) {
 if (!$icons) {
     $icons = [
         [
-            'src' => '/assets/pwa/icon-192.png',
+            'src' => app_public_path('assets/icons/admin-192.png') ?: '/assets/icons/admin-192.png',
             'sizes' => '192x192',
             'type' => 'image/png',
             'purpose' => 'any maskable'
         ],
         [
-            'src' => '/assets/pwa/icon-512.png',
+            'src' => app_public_path('assets/icons/admin-512.png') ?: '/assets/icons/admin-512.png',
             'sizes' => '512x512',
             'type' => 'image/png',
             'purpose' => 'any maskable'

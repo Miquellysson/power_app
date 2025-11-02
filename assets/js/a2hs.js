@@ -1,7 +1,7 @@
 /* a2hs.js — Popup/Modal bonito para instalar o app (Android + iOS) em /farmafixed */
 (function () {
   const CONFIG = {
-    appName: 'Get Power',
+    appName: 'Get Power Research',
     // >>> caminhos ABSOLUTOS para a subpasta
     icon192: '/assets/icons/farma-192.png',
     deferDaysAfterDismiss: 7,
@@ -128,9 +128,9 @@
     deferredEvt = e;
     if (dismissedRecently() || isInStandalone) return;
     makeModal({
-      title: 'Instalar App Get Power',
+      title: 'Instalar App Get Power Research',
       subtitle: location.hostname + '/farmafixed',
-      primaryLabel: 'Instalar App Get Power'
+      primaryLabel: 'Instalar App Get Power Research'
     });
   });
 
@@ -139,7 +139,7 @@
     if (!isIOS) return;
     [['apple-mobile-web-app-capable','yes'],
      ['apple-mobile-web-app-status-bar-style','black-translucent'],
-     ['apple-mobile-web-app-title', 'Get Power']
+     ['apple-mobile-web-app-title', 'Get Power Research']
     ].forEach(([n,c])=>{
       if (!document.querySelector(`meta[name="${n}"]`)) {
         const m=document.createElement('meta'); m.name=n; m.content=c; document.head.appendChild(m);
@@ -151,7 +151,7 @@
   }
   function showIOSModal() {
     if (dismissedRecently() || isInStandalone) return;
-    makeModal({ title: 'Instalar App Get Power', subtitle: '', ios: true });
+    makeModal({ title: 'Instalar App Get Power Research', subtitle: '', ios: true });
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

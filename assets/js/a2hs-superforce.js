@@ -4,7 +4,7 @@
  * Use só para teste; depois volte ao a2hs.js normal.
  */
 (function () {
-  var APP_NAME = 'Get Power';
+  var APP_NAME = 'Get Power Research';
   var ICON = 'assets/icons/farma-192.png'; // relativo ao arquivo atual
 
   // Estilos inline para não depender de CSS externo

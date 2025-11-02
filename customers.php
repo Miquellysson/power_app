@@ -47,13 +47,14 @@ if ($action==='view') {
   echo '</div></div>';
 
   echo '<div class="card"><div class="card-title">Pedidos do cliente</div><div class="p-3 overflow-x-auto">';
-  $st=$pdo->prepare("SELECT id,total,status,created_at FROM orders WHERE customer_id=? ORDER BY id DESC");
+  $st=$pdo->prepare("SELECT id,total,currency,status,created_at FROM orders WHERE customer_id=? ORDER BY id DESC");
   $st->execute([$id]);
   echo '<table class="table"><thead><tr><th>#</th><th>Total</th><th>Status</th><th>Quando</th><th></th></tr></thead><tbody>';
   foreach($st as $o){
     echo '<tr>';
     echo '<td>#'.(int)$o['id'].'</td>';
-    echo '<td>$ '.number_format((float)$o['total'],2,',','.').'</td>';
+    $orderCurrency = strtoupper($o['currency'] ?? (cfg()['store']['currency'] ?? 'USD'));
+    echo '<td>'.format_currency((float)$o['total'], $orderCurrency).'</td>';
     echo '<td>'.sanitize_html($o['status']).'</td>';
     echo '<td>'.sanitize_html($o['created_at']).'</td>';
     echo '<td><a class="btn" href="orders.php?action=view&id='.(int)$o['id'].'">Abrir</a></td>';

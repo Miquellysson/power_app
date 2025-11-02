@@ -1,7 +1,7 @@
 /* a2hs-force.js — versão de teste: força o banner aparecer SEM esperar beforeinstallprompt */
 (function () {
   const CONFIG = {
-    appName: 'Get Power',
+    appName: 'Get Power Research',
     icon192: '/assets/icons/farma-192.png',
     deferDaysAfterDismiss: 1 // quantos dias esperar após o usuário fechar o banner
   };

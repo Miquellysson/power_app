@@ -1,6 +1,6 @@
 <?php
 /**
- * install.php — Get Power (pasta /getpower)
+ * install.php — Get Power Research (pasta /getpower)
  * - Cria/atualiza as tabelas
  * - Faz seed de admin, categorias e produtos demo
  * - Idempotente (pode rodar mais de uma vez)
@@ -12,6 +12,7 @@ error_reporting(E_ALL);
 
 // Carrega config (constantes DB_* e ADMIN_*) e conexão
 $configData = require __DIR__ . '/config.php';
+$defaultCurrency = strtoupper($configData['store']['currency'] ?? 'USD');
 require __DIR__ . '/lib/db.php';
 
 try {
@@ -49,10 +50,14 @@ try {
     description TEXT,
     price DECIMAL(10,2) NOT NULL,
     price_compare DECIMAL(10,2) NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
     shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 7.00,
     stock INT NOT NULL DEFAULT 100,
     image_path VARCHAR(255) NULL,
     square_payment_link VARCHAR(255) NULL,
+    square_credit_link VARCHAR(255) NULL,
+    square_debit_link VARCHAR(255) NULL,
+    square_afterpay_link VARCHAR(255) NULL,
     stripe_payment_link VARCHAR(255) NULL,
     active TINYINT(1) DEFAULT 1,
     featured TINYINT(1) DEFAULT 0,
@@ -62,6 +67,38 @@ try {
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM products");
+    $hasCurrencyCol = false;
+    $hasCreditCol = false;
+    $hasDebitCol = false;
+    $hasAfterpayCol = false;
+    if ($cols) {
+      while ($col = $cols->fetch(PDO::FETCH_ASSOC)) {
+        $field = $col['Field'] ?? '';
+        if ($field === 'currency') $hasCurrencyCol = true;
+        if ($field === 'square_credit_link') $hasCreditCol = true;
+        if ($field === 'square_debit_link') $hasDebitCol = true;
+        if ($field === 'square_afterpay_link') $hasAfterpayCol = true;
+      }
+    }
+    if (!$hasCurrencyCol) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'USD' AFTER price_compare");
+    }
+    if (!$hasCreditCol) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN square_credit_link VARCHAR(255) NULL AFTER square_payment_link");
+    }
+    if (!$hasDebitCol) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN square_debit_link VARCHAR(255) NULL AFTER square_credit_link");
+    }
+    if (!$hasAfterpayCol) {
+      $pdo->exec("ALTER TABLE products ADD COLUMN square_afterpay_link VARCHAR(255) NULL AFTER square_debit_link");
+    }
+    $upd = $pdo->prepare("UPDATE products SET currency = ? WHERE currency IS NULL OR currency = ''");
+    $upd->execute([$defaultCurrency]);
+    $pdo->exec("UPDATE products SET square_credit_link = CASE WHEN (square_credit_link IS NULL OR square_credit_link = '') THEN square_payment_link ELSE square_credit_link END");
+  } catch (Throwable $e) {}
 
   // ===== CUSTOMERS =====
   $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
@@ -85,6 +122,7 @@ try {
     subtotal DECIMAL(10,2) NOT NULL,
     shipping_cost DECIMAL(10,2) DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
     payment_method VARCHAR(40) NOT NULL,
     payment_ref TEXT,
     payment_status VARCHAR(20) DEFAULT 'pending',
@@ -97,6 +135,19 @@ try {
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+  try {
+    $col = $pdo->query("SHOW COLUMNS FROM orders LIKE 'currency'");
+    $hasCurrencyCol = $col && $col->fetch();
+    if (!$hasCurrencyCol) {
+      $pdo->exec("ALTER TABLE orders ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'USD' AFTER total");
+      $upd = $pdo->prepare("UPDATE orders SET currency = ? WHERE currency IS NULL OR currency = ''");
+      $upd->execute([$defaultCurrency]);
+    } else {
+      $upd = $pdo->prepare("UPDATE orders SET currency = ? WHERE currency = ''");
+      $upd->execute([$defaultCurrency]);
+    }
+  } catch (Throwable $e) {}
 
   // ===== ORDER ITEMS (compat com diag.php e futuras consultas) =====
   $pdo->exec("CREATE TABLE IF NOT EXISTS order_items (
@@ -144,6 +195,22 @@ try {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_layout_slug_status (page_slug, status)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+
+  // ===== PASSWORD RESETS =====
+  $pdo->exec("CREATE TABLE IF NOT EXISTS password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    ip_request VARCHAR(45),
+    user_agent VARCHAR(255),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_token (token_hash),
+    INDEX idx_user (user_id),
+    CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
   // ===== PAYMENT METHODS =====
@@ -310,7 +377,7 @@ try {
     } catch (Throwable $e) {}
 
     $storeCfg = $configData['store'] ?? [];
-    $storeNameDefault = $existingSettings['store_name'] ?? ($storeCfg['name'] ?? 'Get Power');
+    $storeNameDefault = $existingSettings['store_name'] ?? ($storeCfg['name'] ?? 'Get Power Research');
     $storeEmailDefault = $existingSettings['store_email'] ?? ($storeCfg['support_email'] ?? 'contato@example.com');
     $storePhoneDefault = $existingSettings['store_phone'] ?? ($storeCfg['phone'] ?? '(00) 00000-0000');
     $storeAddressDefault = $existingSettings['store_address'] ?? ($storeCfg['address'] ?? 'Endereço não configurado');
@@ -367,7 +434,7 @@ HTML;
       'whatsapp_message'      => 'Olá! Gostaria de tirar uma dúvida sobre os produtos.',
       'store_currency'        => 'USD',
       'pwa_name'              => $storeNameDefault,
-      'pwa_short_name'        => 'Get Power',
+      'pwa_short_name'        => 'Get Power Research',
       'home_featured_enabled' => '0',
       'home_featured_title'   => 'Ofertas em destaque',
       'home_featured_subtitle'=> 'Seleção especial com preços imperdíveis.',
@@ -539,8 +606,8 @@ HTML;
       if (!empty($paymentsCfg['square'])) {
         $defaults[] = [
           'code' => 'square',
-          'name' => 'Square',
-          'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout Square em uma nova aba.',
+          'name' => 'Cartão de crédito',
+          'instructions' => $paymentsCfg['square']['instructions'] ?? 'Abriremos o checkout de cartão de crédito em uma nova aba.',
           'settings' => [
             'type' => 'square',
             'mode' => 'square_product_link',
@@ -550,6 +617,20 @@ HTML;
           'sort_order' => 50
         ];
       }
+
+      $defaults[] = [
+        'code' => 'whatsapp',
+        'name' => 'WhatsApp',
+        'instructions' => $paymentsCfg['whatsapp']['instructions'] ?? 'Converse com nossa equipe pelo WhatsApp para concluir: {whatsapp_link}.',
+        'settings' => [
+          'type' => 'whatsapp',
+          'number' => $paymentsCfg['whatsapp']['number'] ?? '',
+          'message' => $paymentsCfg['whatsapp']['message'] ?? 'Olá! Gostaria de finalizar meu pedido.',
+          'link' => $paymentsCfg['whatsapp']['link'] ?? ''
+        ],
+        'require_receipt' => 0,
+        'sort_order' => 60
+      ];
 
       if ($defaults) {
         $ins = $pdo->prepare("INSERT INTO payment_methods(code,name,instructions,settings,require_receipt,sort_order) VALUES (?,?,?,?,?,?)");

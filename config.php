@@ -14,11 +14,11 @@ if (!defined('DB_NAME')) {
 }
 if (!defined('DB_USER')) {
     $env = getenv('FF_DB_USER');
-    define('DB_USER', $env !== false ? $env : 'app_user');
+    define('DB_USER', $env !== false ? $env : 'mike');
 }
 if (!defined('DB_PASS')) {
     $env = getenv('FF_DB_PASS');
-    define('DB_PASS', $env !== false ? $env : '');
+    define('DB_PASS', $env !== false ? $env : '123456');
 }
 if (!defined('DB_CHARSET')) define('DB_CHARSET', 'utf8mb4');
 
@@ -28,11 +28,11 @@ if (!defined('DEFAULT_LANG')) define('DEFAULT_LANG', getenv('FF_DEFAULT_LANG') ?
 // Admin
 if (!defined('ADMIN_EMAIL')) {
     $env = getenv('FF_ADMIN_EMAIL');
-    define('ADMIN_EMAIL', $env !== false ? $env : 'admin@example.com');
+    define('ADMIN_EMAIL', $env !== false ? $env : 'ml@mmlins.com.br');
 }
 if (!defined('ADMIN_PASS_HASH')) {
     $env = getenv('FF_ADMIN_PASS_HASH');
-    define('ADMIN_PASS_HASH', $env !== false ? $env : '');
+    define('ADMIN_PASS_HASH', $env !== false ? $env : '$2y$10$/PxWpUB4Hw/2x4Yy9epO5OAqvBL0zWHD.AbSWcMVmpzAyiqHQXJZi');
 }
 
 // ==========================
@@ -40,10 +40,11 @@ if (!defined('ADMIN_PASS_HASH')) {
 // ==========================
 
 return [
+    'app_base_url' => getenv('FF_APP_BASE_URL') ?: '',
     'store' => [
-        'name'          => 'Get Power',
+        'name'          => 'Get Power Research',
         'currency'      => 'USD',
-        'support_email' => 'support@getpower.local',
+        'support_email' => 'support@getpowerresearch.com',
         'phone'         => '(00) 00000-0000',
         'address'       => 'Atualize este endereço nas configurações.',
         'base_url'      => getenv('FF_BASE_URL') ?: '',
@@ -74,8 +75,15 @@ return [
         ],
         'square' => [
             'enabled'      => false,
-            'instructions' => 'Abriremos o checkout Square em uma nova aba para concluir o pagamento.',
+            'instructions' => 'Abriremos o checkout de cartão de crédito em uma nova aba para concluir o pagamento.',
             'open_new_tab' => true,
+        ],
+        'whatsapp' => [
+            'enabled'   => false,
+            'number'    => '',
+            'message'   => 'Olá! Gostaria de finalizar meu pedido.',
+            'link'      => '',
+            'instructions' => 'Finalize seu pedido conversando com nossa equipe pelo WhatsApp: {whatsapp_link}.',
         ],
     ],
     'paths' => [

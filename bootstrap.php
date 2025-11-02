@@ -21,11 +21,18 @@ if (!defined('LSCACHE_NO_CACHE')) {
 if (session_status() !== PHP_SESSION_ACTIVE) {
   $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443);
   // Nome fixo evita colisão com outras apps no mesmo domínio
+  $cookieDomain = $_SERVER['HTTP_HOST'] ?? '';
+  if (strpos($cookieDomain, ':') !== false) {
+    $cookieDomain = explode(':', $cookieDomain)[0];
+  }
+  if ($cookieDomain === '' || $cookieDomain === 'localhost' || $cookieDomain === '127.0.0.1' || strpos($cookieDomain, '.') === false) {
+    $cookieDomain = null;
+  }
   session_name('GetPowerSESSID');
   session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
-    'domain'   => $_SERVER['HTTP_HOST'] ?? '',
+    'domain'   => $cookieDomain,
     'secure'   => $secure,
     'httponly' => true,
     'samesite' => 'Lax',
